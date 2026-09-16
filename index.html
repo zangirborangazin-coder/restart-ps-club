@@ -1257,7 +1257,18 @@ const defaultEmployees = [
     { name: 'Нурбол', login: 'Nurbol', password: 'Asd1230123', role: 'owner', fixed: true },
     { name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true }
 ];
-const employees = () => JSON.parse(localStorage.getItem('restart_employees') || JSON.stringify(defaultEmployees));
+let remoteEmployees = [];
+async function fetchEmployees() {
+    try {
+        const response = await fetch('/api/employees');
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        remoteEmployees = await response.json();
+        renderOwnerPanel();
+    } catch (error) {
+        console.error('Ошибка получения сотрудников:', error);
+    }
+}
+const employees = () => remoteEmployees;
 let currentUser = JSON.parse(sessionStorage.getItem('restart_user') || 'null');
 let ADMIN_NAME = currentUser?.name || '';
 
@@ -1273,6 +1284,7 @@ function recordAccessAttempt(login) {
 }
 function login(event) {
     event.preventDefault();
+    if (!remoteEmployees.length) return alert('Сотрудники ещё загружаются. Повторите вход через несколько секунд.');
     const loginValue = document.getElementById('login-user').value.trim();
     const passwordValue = document.getElementById('login-password').value;
     const user = employees().find(item => item.login === loginValue && item.password === passwordValue);
@@ -1405,7 +1417,7 @@ function renderOwnerPanel() {
     const canViewCredentials = currentUser.role === 'owner';
     const visibleEmployees = currentUser.role === 'owner' ? employees().filter(item => item.role !== 'it') : employees();
     document.getElementById('employees-head').innerHTML = canViewCredentials ? '<tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Действие</th></tr>' : '<tr><th>Имя</th><th>Роль</th><th>Действие</th></tr>';
-    document.getElementById('employees-body').innerHTML = visibleEmployees.map(item => { const index = employees().indexOf(item); return `<tr><td>${item.name}</td>${canViewCredentials ? `<td>${item.login}</td><td>${item.password}</td>` : ''}<td>${item.role}</td><td><button class="text-blue-400 mr-3" onclick="editEmployee(${index})">Изменить</button>${item.fixed ? '<span class="text-slate-500">Системный</span>' : `<button class="text-red-400" onclick="removeEmployee(${index})">Удалить</button>`}</td></tr>`; }).join('');
+    document.getElementById('employees-body').innerHTML = visibleEmployees.map(item => `<tr><td>${item.name}</td>${canViewCredentials ? `<td>${item.login}</td><td>${item.password}</td>` : ''}<td>${item.role}</td><td><button class="text-blue-400 mr-3" onclick="editEmployee(${item.id})">Изменить</button>${item.fixed ? '<span class="text-slate-500">Системный</span>' : `<button class="text-red-400" onclick="removeEmployee(${item.id})">Удалить</button>`}</td></tr>`).join('');
     renderRevenueCalendar();
 }
 function addExpense() {
@@ -1418,36 +1430,51 @@ function addExpense() {
     document.getElementById('expense-title').value = ''; document.getElementById('expense-amount').value = '';
     renderOwnerPanel();
 }
-function saveEmployee() {
+async function saveEmployee() {
     if (!isOwnerOrIT()) return;
     const name = document.getElementById('employee-name').value.trim();
     const loginValue = document.getElementById('employee-login').value.trim();
     const password = document.getElementById('employee-password').value;
     const role = document.getElementById('employee-role').value;
     if (!name || !loginValue || !password) return alert('Заполните данные сотрудника.');
-    const list = employees();
-    if (list.some(item => item.login === loginValue)) return alert('Такой логин уже используется.');
-    list.push({ name, login: loginValue, password, role, fixed: false });
-    localStorage.setItem('restart_employees', JSON.stringify(list));
-    ['employee-name', 'employee-login', 'employee-password'].forEach(id => document.getElementById(id).value = '');
-    renderOwnerPanel();
+    try {
+        const response = await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, login: loginValue, password, role }) });
+        if (!response.ok) { const error = await response.json(); return alert('Ошибка добавления: ' + (error.error || 'Логин занят')); }
+        ['employee-name', 'employee-login', 'employee-password'].forEach(id => document.getElementById(id).value = '');
+        await fetchEmployees();
+        showSystemToast('Сотрудник успешно добавлен');
+    } catch (error) {
+        alert('Ошибка сети при добавлении');
+    }
 }
-function removeEmployee(index) {
+async function removeEmployee(id) {
     if (!isOwnerOrIT()) return;
-    const list = employees(); list.splice(index, 1); localStorage.setItem('restart_employees', JSON.stringify(list)); renderOwnerPanel();
+    if (!confirm('Удалить сотрудника?')) return;
+    try {
+        const response = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+        if (!response.ok) { const error = await response.json(); return alert(error.error || 'Ошибка удаления'); }
+        await fetchEmployees();
+        showSystemToast('Сотрудник удалён');
+    } catch (error) {
+        alert('Ошибка сети при удалении');
+    }
 }
-function editEmployee(index) {
+async function editEmployee(id) {
     if (!isOwnerOrIT()) return;
-    const list = employees();
-    const item = list[index];
+    const item = employees().find(employee => employee.id === id);
+    if (!item) return alert('Сотрудник не найден');
     const name = prompt('Имя сотрудника:', item.name);
     const loginValue = prompt('Новый логин:', item.login);
     const password = prompt('Новый пароль:', item.password);
     if (!name || !loginValue || !password) return;
-    if (list.some((entry, entryIndex) => entry.login === loginValue && entryIndex !== index)) return alert('Такой логин уже используется.');
-    list[index] = { ...item, name, login: loginValue, password };
-    localStorage.setItem('restart_employees', JSON.stringify(list));
-    renderOwnerPanel();
+    try {
+        const response = await fetch(`/api/employees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, login: loginValue, password, role: item.role }) });
+        if (!response.ok) { const error = await response.json(); return alert(error.error || 'Ошибка изменения'); }
+        await fetchEmployees();
+        showSystemToast('Сотрудник изменён');
+    } catch (error) {
+        alert('Ошибка сети при изменении');
+    }
 }
 function openShiftModal() { document.getElementById('shift-report-modal').classList.remove('hidden'); document.getElementById('shift-report-modal').classList.add('flex'); }
 function closeShiftModal() { document.getElementById('shift-report-modal').classList.add('hidden'); document.getElementById('shift-report-modal').classList.remove('flex'); }
@@ -1588,6 +1615,7 @@ window.addEventListener('load', () => {
     initAccess();
     const previousCash = document.getElementById('previous-cash');
     if (previousCash) previousCash.value = localStorage.getItem('last_cash_balance') || '0';
+    fetchEmployees();
 });
 </script>
 
