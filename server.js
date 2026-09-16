@@ -23,7 +23,6 @@ let memoryRuns = [];
 let memoryBookings = [];
 let memoryPayments = [];
 let memoryPresence = [];
-let memoryCashBalance = null;
 
 async function initializeDatabase() {
 	if (!pool) {
@@ -89,17 +88,6 @@ async function initializeDatabase() {
 			last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`);
-	await pool.query(`
-		CREATE TABLE IF NOT EXISTS cash_balance (
-			id INTEGER PRIMARY KEY CHECK (id = 1),
-			amount INTEGER NOT NULL DEFAULT 0,
-			denominations JSONB NOT NULL DEFAULT '{}'::jsonb,
-			user_name TEXT NOT NULL,
-			date_key TEXT NOT NULL,
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`);
-	await pool.query(`ALTER TABLE cash_balance ADD COLUMN IF NOT EXISTS denominations JSONB NOT NULL DEFAULT '{}'::jsonb`);
 	for (const [name, login, password, role, fixed] of defaultEmployees) {
 		await pool.query(
 			`INSERT INTO employees (name, login, password, role, fixed)
@@ -296,27 +284,6 @@ app.delete('/api/presence/:sessionId', async (req, res) => {
 	}
 });
 
-app.get('/api/cash-balance', async (_req, res) => {
-	if (!databaseAvailable) return res.json(memoryCashBalance || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
-	try {
-		const { rows } = await pool.query('SELECT amount, denominations, user_name AS user, date_key, updated_at FROM cash_balance WHERE id = 1');
-		res.json(rows[0] || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
-	} catch (error) { console.error('GET /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось загрузить кассу' }); }
-});
-
-app.post('/api/cash-balance', async (req, res) => {
-	const { amount, denominations = {}, user, dateKey } = req.body || {};
-	if (!Number.isFinite(Number(amount)) || Number(amount) < 0 || !user || !dateKey) return res.status(400).json({ error: 'Некорректная касса' });
-	if (!databaseAvailable) {
-		memoryCashBalance = { amount: Number(amount), denominations, user, dateKey, updatedAt: new Date().toLocaleTimeString('ru-RU') };
-		return res.json(memoryCashBalance);
-	}
-	try {
-		const { rows } = await pool.query(`INSERT INTO cash_balance (id, amount, denominations, user_name, date_key) VALUES (1,$1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET amount=$1,denominations=$2,user_name=$3,date_key=$4,updated_at=NOW() RETURNING amount,denominations,user_name AS user,date_key,updated_at`, [amount, JSON.stringify(denominations), user, dateKey]);
-		res.json(rows[0]);
-	} catch (error) { console.error('POST /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось сохранить кассу' }); }
-});
-
 app.get('/api/payments', async (_req, res) => {
 	if (!databaseAvailable) return res.json(memoryPayments);
 	try { const { rows } = await pool.query('SELECT id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone FROM payments ORDER BY timestamp'); res.json(rows); }
@@ -331,25 +298,6 @@ app.post('/api/payments', async (req, res) => {
 		const { rows } = await pool.query(`INSERT INTO payments (id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET cash=$2,qr=$3,total=$9 RETURNING *`, [payment.id, payment.cash, payment.qr, payment.timestamp, payment.dateKey, payment.time, payment.startStr, payment.endStr, payment.total, payment.duration, payment.zone]);
 		res.status(201).json(rows[0]);
 	} catch (error) { console.error('POST /api/payments:', error); res.status(500).json({ error: 'Не удалось сохранить оплату' }); }
-});
-
-app.put('/api/payments/:id', async (req, res) => {
-	const { qr, cash, total } = req.body || {};
-	if (!Number.isFinite(Number(qr)) || !Number.isFinite(Number(cash)) || !Number.isFinite(Number(total)) || qr < 0 || cash < 0) return res.status(400).json({ error: 'Некорректные суммы' });
-	if (!databaseAvailable) {
-		const payment = memoryPayments.find(item => item.id === Number(req.params.id));
-		if (!payment) return res.status(404).json({ error: 'Оплата не найдена' });
-		Object.assign(payment, { qr: Number(qr), cash: Number(cash), total: Number(total) });
-		return res.json(payment);
-	}
-	try {
-		const { rows } = await pool.query('UPDATE payments SET qr = $1, cash = $2, total = $3 WHERE id = $4 RETURNING *', [qr, cash, total, req.params.id]);
-		if (!rows[0]) return res.status(404).json({ error: 'Оплата не найдена' });
-		res.json(rows[0]);
-	} catch (error) {
-		console.error('PUT /api/payments/:id:', error);
-		res.status(500).json({ error: 'Не удалось изменить оплату' });
-	}
 });
 
 app.delete('/api/payments/date/:dateKey', async (req, res) => {
