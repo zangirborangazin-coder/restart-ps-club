@@ -1269,6 +1269,10 @@ let remoteEmployees = [
 // Геттер сотрудников
 const employees = () => remoteEmployees;
 
+function isOwnerOrIT() {
+    return Boolean(currentUser && ['owner', 'it'].includes(currentUser.role));
+}
+
 // 2. Фоновая загрузка дополнительных сотрудников из базы PostgreSQL
 async function fetchEmployees() {
   try {
