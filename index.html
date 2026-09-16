@@ -7,8 +7,6 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="shortcut icon" href="/favicon.svg" type="image/x-icon">
     <style>
         :root { 
             --bg: #000000;
@@ -478,14 +476,6 @@
 
 <div id="system-toast"></div>
 
-<div id="last-shift-result" class="hidden max-w-7xl mx-auto px-10 pt-6">
-    <div class="stealth-card p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div><div class="text-xs text-slate-400">Касса</div><div id="settlement-cash" class="text-xl font-black mt-1">0 ₸</div></div>
-        <div><div class="text-xs text-slate-400">Взял</div><div id="settlement-taken" class="text-xl font-black mt-1">7 000 ₸</div></div>
-        <div><div class="text-xs text-slate-400">Остаток</div><div id="settlement-balance" class="text-xl font-black mt-1">0 ₸</div></div>
-    </div>
-</div>
-
 <div id="main-page" class="page active max-w-7xl mx-auto p-10">
     <div class="section-head">
         <div>
@@ -533,7 +523,6 @@
             <div class="mt-6 p-4 bg-white/5 rounded-xl text-center">
                 <div class="text-[10px] text-gray-500 uppercase">Итого наличных</div>
                 <div id="cash-from-qty-total" class="text-xl font-bold font-mono text-white">0 ₸</div>
-                <button class="btn-stealth w-full mt-4" onclick="saveCashBalance()">Сохранить кассу</button>
             </div>
         </div>
 
@@ -610,11 +599,10 @@
         <div class="owner-stat"><div class="text-xs text-slate-400">Неделя</div><div id="owner-week" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Месяц</div><div id="owner-month" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Расходы</div><div id="owner-expenses-total" class="text-2xl font-black mt-2">0 ₸</div></div>
-        <div class="owner-stat"><div class="text-xs text-slate-400">Фактическая наличная касса</div><div id="owner-cash-balance" class="text-2xl font-black mt-2">0 ₸</div><div id="owner-cash-updated" class="text-[10px] text-slate-500 mt-1"></div></div>
     </div>
     <div class="stealth-card p-6 mb-8">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div><h2 class="font-bold text-lg">Календарь выручки</h2><p class="text-xs text-slate-400 mt-2">Выберите любую дату, чтобы посмотреть выручку.</p></div>
+            <div><h2 class="font-bold text-lg">Календарь выручки</h2><p class="text-xs text-slate-400 mt-2">Дни появляются после открытия смены администратором.</p></div>
             <input id="revenue-date" type="date" min="2026-01-01" max="2028-01-01" onchange="renderSelectedRevenue()" class="w-full md:w-auto">
         </div>
         <div id="opened-dates" class="flex flex-wrap gap-2 mt-5"></div>
@@ -627,11 +615,11 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div class="stealth-card p-6">
             <h2 class="font-bold text-lg mb-5">История смен</h2>
-            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Касса</th><th></th></tr></thead><tbody id="history-body"></tbody></table></div>
+            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Касса</th></tr></thead><tbody id="history-body"></tbody></table></div>
         </div>
         <div class="stealth-card p-6">
             <div class="flex items-center justify-between gap-3 mb-5"><h2 class="font-bold text-lg">Оплаты клиентов сегодня</h2><button class="text-xs text-red-400 font-bold" onclick="clearTodayPayments()">Очистить</button></div>
-            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Время</th><th>Зона</th><th>QR</th><th>Наличные</th><th>Итого</th><th></th></tr></thead><tbody id="payments-today-body"></tbody></table></div>
+            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Время</th><th>Зона</th><th>QR</th><th>Наличные</th><th>Итого</th></tr></thead><tbody id="payments-today-body"></tbody></table></div>
             <div id="payments-today-total" class="text-right font-bold mt-4">Сегодня: 0 ₸</div>
         </div>
         <div class="stealth-card p-6">
@@ -641,7 +629,7 @@
         </div>
         <div class="stealth-card p-6 lg:col-span-2">
             <div class="flex justify-between items-center mb-5"><h2 class="font-bold text-lg">Управление сотрудниками</h2><span class="text-xs text-slate-400">Владелец и IT</span></div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5"><input id="employee-name" placeholder="Имя"><input id="employee-login" placeholder="Логин"><input id="employee-password" placeholder="Пароль"><select id="employee-role"><option value="admin">Администратор</option></select></div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5"><input id="employee-name" placeholder="Имя"><input id="employee-login" placeholder="Логин"><input id="employee-password" placeholder="Пароль"><select id="employee-role"><option value="admin">Администратор</option><option value="owner">Владелец</option><option value="it">IT</option></select></div>
             <button class="btn-stealth mb-5" onclick="saveEmployee()">Добавить сотрудника</button>
             <div class="overflow-auto"><table class="owner-table"><thead id="employees-head"></thead><tbody id="employees-body"></tbody></table></div>
         </div>
@@ -1114,7 +1102,7 @@ function trackAction(message) {
 
     function showPage(id, btn) {
         if (id === 'owner-page' && !isOwnerOrIT()) { showSystemToast('Доступ только владельцу или IT'); return; }
-        if (id === 'cash-page' && !isOwnerOrIT() && getUserRole() !== 'admin') { showSystemToast('Касса доступна только сотрудникам смены'); return; }
+        if (id === 'cash-page' && !isOwnerOrIT()) { showSystemToast('Касса доступна только владельцу или IT'); return; }
         if (id === 'admin-page' && (!currentUser || currentUser.role !== 'admin')) { showSystemToast('Меню доступно только администратору'); return; }
         document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
@@ -1465,16 +1453,9 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
-    if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
     if (getUserRole() === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
-    document.querySelectorAll('#cash-page input').forEach(input => {
-        const protectedFinanceField = !input.classList.contains('denom-count');
-        input.readOnly = getUserRole() === 'admin' && protectedFinanceField;
-        input.disabled = getUserRole() === 'admin' && protectedFinanceField;
-    });
+    document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = getUserRole() === 'admin'; input.disabled = getUserRole() === 'admin'; });
     startPresence();
-    fetchCashBalance();
-    renderLastSettlement();
     renderOwnerPanel();
 }
 function initAccess() {
@@ -1485,65 +1466,6 @@ function initAccess() {
 // --- 3. ГЛАВНЫЙ РАСЧЕТ КАССЫ ---
 function getHistory() { return JSON.parse(localStorage.getItem('shift_history') || '[]'); }
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
-let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
-async function fetchCashBalance() {
-    try {
-        const response = await fetch('/api/cash-balance');
-        if (response.ok) {
-            currentCashBalance = await response.json();
-            localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
-            if (currentCashBalance.denominations) applyDenominationState(currentCashBalance.denominations);
-            if (isOwnerOrIT()) renderOwnerPanel();
-        }
-    } catch (error) { console.warn('Не удалось загрузить фактическую кассу:', error); }
-}
-async function saveCashBalance() {
-    if (!currentUser || !['admin', 'owner', 'it'].includes(getUserRole())) return;
-    let total = 0;
-    document.querySelectorAll('.denom-count').forEach(input => { total += (parseInt(input.value) || 0) * parseInt(input.dataset.val); });
-    const denominations = getDenominationState();
-    const payload = { amount: total, denominations, user: currentUser.name, dateKey: getLocalDateKey() };
-    try {
-        const response = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error('cash');
-        currentCashBalance = await response.json();
-        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
-        renderOwnerPanel();
-        showSystemToast('Наличная касса сохранена');
-    } catch (error) { showSystemToast('Не удалось сохранить кассу'); }
-}
-function getDenominationState() {
-    const state = {};
-    document.querySelectorAll('.denom-count').forEach(input => { state[Number(input.dataset.val)] = parseInt(input.value) || 0; });
-    return state;
-}
-function getDenominationTotal(state = getDenominationState()) {
-    return Object.entries(state).reduce((sum, [value, count]) => sum + Number(value) * count, 0);
-}
-function withdrawFromDenominations(state, amount) {
-    const denominations = Object.keys(state).map(Number).sort((a, b) => b - a);
-    const dp = Array.from({ length: amount + 1 }, () => null);
-    dp[0] = {};
-    for (const denomination of denominations) {
-        const count = state[denomination] || 0;
-        for (let copy = 0; copy < count; copy++) {
-            for (let sum = amount; sum >= denomination; sum--) {
-                if (dp[sum] === null && dp[sum - denomination] !== null) {
-                    dp[sum] = { ...dp[sum - denomination], [denomination]: (dp[sum - denomination][denomination] || 0) + 1 };
-                }
-            }
-        }
-    }
-    if (dp[amount] === null) return null;
-    const remaining = { ...state };
-    Object.entries(dp[amount]).forEach(([value, count]) => { remaining[value] -= count; });
-    return remaining;
-}
-function applyDenominationState(state) {
-    document.querySelectorAll('.denom-count').forEach(input => { input.value = state[Number(input.dataset.val)] || 0; });
-    localStorage.setItem('cash_denominations', JSON.stringify(state));
-    calcCashFromQty();
-}
 function getAvailableRevenueDates() {
     const openedDates = JSON.parse(localStorage.getItem('opened_shift_dates') || '[]');
     const historyDates = getHistory().map(item => item.dateKey).filter(Boolean);
@@ -1571,21 +1493,15 @@ function getRevenueForDate(dateKey) {
     const current = Object.values(payments).filter(item => (item.dateKey || getLocalDateKey(new Date(item.timestamp || 0))) === dateKey);
     return archived.concat(fallback, current);
 }
-function renderLastSettlement() {
-    const result = JSON.parse(localStorage.getItem('last_shift_settlement') || 'null');
-    const box = document.getElementById('last-shift-result');
-    if (!box || !result || !currentUser) return;
-    document.getElementById('settlement-cash').innerText = `${Number(result.cashOnHand || 0).toLocaleString()} ₸`;
-    document.getElementById('settlement-taken').innerText = `7 000 ₸ (${result.source === 'cash' ? 'наличные' : 'Kaspi'})`;
-    document.getElementById('settlement-balance').innerText = `${Number(result.balance || 0).toLocaleString()} ₸`;
-    box.classList.remove('hidden');
-}
 function renderSelectedRevenue() {
     const dateInput = document.getElementById('revenue-date');
     const selectedDate = dateInput.value;
-    if (!selectedDate) return;
-    localStorage.setItem('selected_revenue_date', selectedDate);
+    const available = getAvailableRevenueDates();
     const result = document.getElementById('selected-revenue');
+    if (!available.includes(selectedDate)) {
+        result.innerHTML = '<div class="text-sm text-slate-400 md:col-span-3">В этот день смена ещё не открывалась.</div>';
+        return;
+    }
     const totals = getRevenueTotals(selectedDate);
     const qr = totals.qr;
     const cash = totals.cash;
@@ -1600,6 +1516,7 @@ function renderSelectedRevenue() {
 function saveRevenueAdjustment() {
     if (!currentUser || currentUser.role !== 'owner') return showSystemToast('Изменять выручку может только владелец');
     const dateKey = document.getElementById('revenue-date').value;
+    if (!getAvailableRevenueDates().includes(dateKey)) return alert('Сначала должна быть открыта смена за эту дату.');
     const qr = Number(document.getElementById('revenue-edit-qr').value);
     const cash = Number(document.getElementById('revenue-edit-cash').value);
     if (!Number.isFinite(qr) || !Number.isFinite(cash) || qr < 0 || cash < 0) return alert('Введите корректные суммы.');
@@ -1613,9 +1530,7 @@ function renderRevenueCalendar() {
     const dates = getAvailableRevenueDates();
     const input = document.getElementById('revenue-date');
     const today = getLocalDateKey();
-    const savedDate = localStorage.getItem('selected_revenue_date');
-    const dateIsValid = savedDate && savedDate >= '2026-01-01' && savedDate <= '2028-01-01';
-    input.value = dateIsValid ? savedDate : today;
+    input.value = dates.includes(today) ? today : (dates[dates.length - 1] || today);
     document.getElementById('opened-dates').innerHTML = dates.map(date => `<button class="btn-secondary text-xs" onclick="document.getElementById('revenue-date').value='${date}'; renderSelectedRevenue()">${date.split('-').reverse().join('.')}</button>`).join('') || '<span class="text-sm text-slate-500">Открытых смен пока нет</span>';
     renderSelectedRevenue();
 }
@@ -1633,23 +1548,19 @@ function renderOwnerPanel() {
     document.getElementById('owner-month').innerText = total(history.filter(item => now - item.timestamp < 31 * day)).toLocaleString() + ' ₸';
     const expenses = getExpenses();
     document.getElementById('owner-expenses-total').innerText = total(expenses).toLocaleString() + ' ₸';
-    document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
-    document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
-    const canEditFinancials = ['owner', 'it'].includes(getUserRole());
-    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="text-slate-500">История пока пуста</td></tr>';
+    document.getElementById('history-body').innerHTML = history.slice().reverse().map(item => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${item.qr.toLocaleString()} ₸</td><td>${item.cash.toLocaleString()} ₸</td><td>${item.finalCash.toLocaleString()} ₸</td></tr>`).join('') || '<tr><td colspan="5" class="text-slate-500">История пока пуста</td></tr>';
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const baseCash = today.reduce((sum, item) => sum + Number(item.cash || 0), 0);
     const todayRows = adjustment ? today.concat([{ time: '-', zone: 'Корректировка владельца', qr: adjustment.qr - baseQr, cash: adjustment.cash - baseCash, total: adjustment.qr + adjustment.cash - baseQr - baseCash }]) : today;
-    document.getElementById('payments-today-body').innerHTML = todayRows.slice().reverse().map(item => `<tr><td>${item.time || '-'}</td><td>${item.zone}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.total || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.id ? `<button class="text-blue-400" title="Изменить" onclick="editPayment(${item.id})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="text-slate-500">Оплат сегодня пока нет</td></tr>';
+    document.getElementById('payments-today-body').innerHTML = todayRows.slice().reverse().map(item => `<tr><td>${item.time || '-'}</td><td>${item.zone}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.total || 0).toLocaleString()} ₸</td></tr>`).join('') || '<tr><td colspan="5" class="text-slate-500">Оплат сегодня пока нет</td></tr>';
     document.getElementById('payments-today-total').innerText = `Сегодня: ${(todayTotals.qr + todayTotals.cash).toLocaleString()} ₸`;
-    document.getElementById('expenses-body').innerHTML = expenses.slice().reverse().map(item => `<div class="flex justify- between border-b border-white/5 py-2 text-sm"><span>${item.title}</span><strong>${item.total.toLocaleString()} ₸</strong></div>`).join('') || '<div class="text-sm text-slate-500">Расходов пока нет</div>';
+    document.getElementById('expenses-body').innerHTML = expenses.slice().reverse().map(item => `<div class="flex justify-between border-b border-white/5 py-2 text-sm"><span>${item.title}</span><strong>${item.total.toLocaleString()} ₸</strong></div>`).join('') || '<div class="text-sm text-slate-500">Расходов пока нет</div>';
     const canViewCredentials = currentUser.role === 'owner';
     const visibleEmployees = currentUser.role === 'owner' ? employees().filter(item => item.role !== 'it') : employees();
     document.getElementById('employees-head').innerHTML = canViewCredentials ? '<tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Действие</th></tr>' : '<tr><th>Имя</th><th>Роль</th><th>Действие</th></tr>';
     document.getElementById('employees-body').innerHTML = visibleEmployees.map(item => `<tr><td>${item.name}</td>${canViewCredentials ? `<td>${item.login}</td><td>${item.password}</td>` : ''}<td>${item.role}</td><td><button class="text-blue-400 mr-3" onclick="editEmployee(${item.id})">Изменить</button>${item.fixed ? '<span class="text-slate-500">Системный</span>' : `<button class="text-red-400" onclick="removeEmployee(${item.id})">Удалить</button>`}</td></tr>`).join('');
     renderRevenueCalendar();
-    renderLastSettlement();
 }
 async function clearTodayPayments() {
     if (!isOwnerOrIT()) return showSystemToast('Очистить оплаты может только владелец или IT');
@@ -1680,44 +1591,12 @@ function addExpense() {
     document.getElementById('expense-title').value = ''; document.getElementById('expense-amount').value = '';
     renderOwnerPanel();
 }
-async function editPayment(id) {
-    if (!['owner', 'it'].includes(getUserRole())) return;
-    const payment = payments[id];
-    if (!payment) return;
-    const qr = Number(prompt('QR, ₸:', payment.qr));
-    const cash = Number(prompt('Наличные, ₸:', payment.cash));
-    if (!Number.isFinite(qr) || !Number.isFinite(cash) || qr < 0 || cash < 0) return alert('Введите корректные суммы.');
-    const updated = { ...payment, qr, cash, total: qr + cash };
-    try {
-        const response = await fetch(`/api/payments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qr, cash, total: updated.total }) });
-        if (!response.ok) throw new Error('payment');
-        payments[id] = updated;
-        localStorage.setItem('saved_payments', JSON.stringify(payments));
-        syncPaymentsToFinance();
-        renderOwnerPanel();
-        showSystemToast('Оплата изменена');
-    } catch (error) { showSystemToast('Не удалось изменить оплату'); }
-}
-function editShiftHistory(index) {
-    if (!['owner', 'it'].includes(getUserRole())) return;
-    const history = getHistory();
-    const item = history[index];
-    if (!item) return;
-    const qr = Number(prompt('QR за смену, ₸:', item.qr));
-    const cash = Number(prompt('Наличные за смену, ₸:', item.cash));
-    const finalCash = Number(prompt('Касса после сдачи, ₸:', item.finalCash));
-    if (![qr, cash, finalCash].every(value => Number.isFinite(value) && value >= 0)) return alert('Введите корректные суммы.');
-    history[index] = { ...item, qr, cash, finalCash, total: qr + cash };
-    localStorage.setItem('shift_history', JSON.stringify(history));
-    renderOwnerPanel();
-    showSystemToast('История смены изменена');
-}
 async function saveEmployee() {
     if (!isOwnerOrIT()) return;
     const name = document.getElementById('employee-name').value.trim();
     const loginValue = document.getElementById('employee-login').value.trim();
     const password = document.getElementById('employee-password').value;
-    const role = 'admin';
+    const role = document.getElementById('employee-role').value;
     if (!name || !loginValue || !password) return alert('Заполните данные сотрудника.');
     try {
         const response = await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, login: loginValue, password, role }) });
@@ -1760,25 +1639,16 @@ async function editEmployee(id) {
 }
 function openShiftModal() { document.getElementById('shift-report-modal').classList.remove('hidden'); document.getElementById('shift-report-modal').classList.add('flex'); }
 function closeShiftModal() { document.getElementById('shift-report-modal').classList.add('hidden'); document.getElementById('shift-report-modal').classList.remove('flex'); }
-async function confirmShiftReport() {
+function confirmShiftReport() {
     const source = document.getElementById('shift-source').value;
-    const denominationState = getDenominationState();
-    const actualCash = getDenominationTotal(denominationState);
+    const previousCash = Number(document.getElementById('previous-cash').value) || 0;
     const qr = Object.values(payments).reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const cash = Object.values(payments).reduce((sum, item) => sum + Number(item.cash || 0), 0);
-    let finalCash = actualCash;
-    if (source === 'cash') {
-        const remaining = withdrawFromDenominations(denominationState, 7000);
-        if (!remaining) return alert('В номиналах нет точной суммы 7 000 ₸ для выдачи. Проверьте купюры.');
-        finalCash = actualCash - 7000;
-        applyDenominationState(remaining);
-    }
-    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash: actualCash, source, finalCash, total: qr + cash, details: Object.values(payments) };
-    localStorage.setItem('last_shift_settlement', JSON.stringify({ cashOnHand: actualCash, source, balance: finalCash, date: report.date, admin: ADMIN_NAME }));
-    await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: finalCash, user: ADMIN_NAME, dateKey: getLocalDateKey() }) }).catch(() => {});
+    const finalCash = previousCash + cash - (source === 'cash' ? 7000 : 0);
+    if (finalCash < 0) return alert('Итоговая наличная касса не может быть отрицательной. Проверьте вчерашнюю кассу.');
+    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, details: Object.values(payments) };
     const history = getHistory(); history.push(report); localStorage.setItem('shift_history', JSON.stringify(history));
     localStorage.setItem('last_cash_balance', String(finalCash));
-    renderLastSettlement();
     generateReport(report);
 }
 
@@ -1909,43 +1779,55 @@ window.addEventListener('load', () => {
     fetchEmployees();
 });
 
-// --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ --- // старый 
+// --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ ---
 async function syncAllData() {
     try {
-        await fetchCashBalance();
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
-            if (activeRuns.length > 0) {
-                const activeKeys = new Set(activeRuns.map(run => run.key));
-                ['std', 'promo', 'open'].forEach(type => {
-                    for (let i = 1; i <= 4; i++) {
-                        const key = `${type}-${i}`;
-                        if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
+            const activeKeys = new Set(activeRuns.map(run => run.key));
+
+            // 1. Сбрасываем завершенные комнаты (теперь работает, даже если 0 активных комнат)
+            ['std', 'promo', 'open'].forEach(type => {
+                for (let i = 1; i <= 4; i++) {
+                    const key = `${type}-${i}`;
+                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) {
+                        resetCard(type, i, false);
                     }
-                });
-                activeRuns.forEach(run => {
-                    const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
-                    localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
-                    renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
-                });
-            }
+                }
+            });
+
+            // 2. Отрисовываем текущие активные сессии
+            activeRuns.forEach(run => {
+                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+            });
         }
 
+        // 3. Синхронизация броней
         const resBookings = await fetch('/api/bookings');
         if (resBookings.ok) {
             const serverBookings = await resBookings.json();
-            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
+            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) {
+                localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
+            }
             refreshBookingUI();
         }
 
+        // 4. Синхронизация кассы и платежей
         const resPayments = await fetch('/api/payments');
         if (resPayments.ok) {
             const serverPayments = await resPayments.json();
             if (serverPayments.length > 0 || Object.keys(payments).length === 0) {
                 payments = {};
                 serverPayments.forEach(payment => {
-                    payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
+                    payments[payment.id] = { 
+                        ...payment, 
+                        dateKey: payment.date_key || payment.dateKey, 
+                        startStr: payment.start_str || payment.startStr, 
+                        endStr: payment.end_str || payment.endStr 
+                    };
                 });
                 localStorage.setItem('saved_payments', JSON.stringify(payments));
             }
@@ -1970,13 +1852,20 @@ async function startControl(type, id) {
     const isOpen = type === 'open';
     if (type === 'std') {
         const endInput = document.getElementById(`te-${key}`);
-        if (endInput.value) { endInput.value = normalizeTimeString(endInput.value); endTime = getM(endInput.value); }
+        if (endInput.value) { 
+            endInput.value = normalizeTimeString(endInput.value); 
+            endTime = getM(endInput.value); 
+        }
     } else if (type === 'promo') {
         endTime = startTime + 180;
     }
     const runData = { key, type, id, startTime, endTime, isOpen };
     try {
-        const response = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runData) });
+        const response = await fetch('/api/runs', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(runData) 
+        });
         if (!response.ok) throw new Error('Не удалось сохранить сессию');
         localStorage.setItem(`run_${key}`, JSON.stringify(runData));
         renderActiveState(key, type, id, startTime, endTime, isOpen);
