@@ -1709,34 +1709,39 @@ async function syncAllData() {
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
-            const activeKeys = new Set(activeRuns.map(run => run.key));
-            ['std', 'promo', 'open'].forEach(type => {
-                for (let i = 1; i <= 4; i++) {
-                    const key = `${type}-${i}`;
-                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
-                }
-            });
-            activeRuns.forEach(run => {
-                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
-                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
-                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
-            });
+            if (activeRuns.length > 0) {
+                const activeKeys = new Set(activeRuns.map(run => run.key));
+                ['std', 'promo', 'open'].forEach(type => {
+                    for (let i = 1; i <= 4; i++) {
+                        const key = `${type}-${i}`;
+                        if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
+                    }
+                });
+                activeRuns.forEach(run => {
+                    const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                    localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                    renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+                });
+            }
         }
 
         const resBookings = await fetch('/api/bookings');
         if (resBookings.ok) {
-            localStorage.setItem('active_bookings', JSON.stringify(await resBookings.json()));
+            const serverBookings = await resBookings.json();
+            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
             refreshBookingUI();
         }
 
         const resPayments = await fetch('/api/payments');
         if (resPayments.ok) {
             const serverPayments = await resPayments.json();
-            payments = {};
-            serverPayments.forEach(payment => {
-                payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
-            });
-            localStorage.setItem('saved_payments', JSON.stringify(payments));
+            if (serverPayments.length > 0 || Object.keys(payments).length === 0) {
+                payments = {};
+                serverPayments.forEach(payment => {
+                    payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
+                });
+                localStorage.setItem('saved_payments', JSON.stringify(payments));
+            }
             syncPaymentsToFinance();
             if (isOwnerOrIT()) renderOwnerPanel();
         }
@@ -1769,6 +1774,8 @@ async function startControl(type, id) {
         localStorage.setItem(`run_${key}`, JSON.stringify(runData));
         renderActiveState(key, type, id, startTime, endTime, isOpen);
     } catch (error) {
+        localStorage.setItem(`run_${key}`, JSON.stringify(runData));
+        renderActiveState(key, type, id, startTime, endTime, isOpen);
         showSystemToast('Не удалось запустить сессию');
     }
 }
@@ -1814,6 +1821,11 @@ async function savePayment(key) {
         await syncAllData();
         showSystemToast('Оплата добавлена в общую кассу');
     } catch (error) {
+        payments[payment.id] = payment;
+        localStorage.setItem('saved_payments', JSON.stringify(payments));
+        syncPaymentsToFinance();
+        document.getElementById(`cash-${key}`).value = '';
+        document.getElementById(`qr-${key}`).value = '';
         showSystemToast('Не удалось сохранить оплату');
     }
 }
@@ -1830,13 +1842,42 @@ async function addBooking() {
         if (!response.ok) throw new Error('booking');
         name.value = ''; phone.value = '+7 '; time.value = '';
         await syncAllData();
-    } catch (error) { showSystemToast('Не удалось сохранить бронь'); }
+    } catch (error) {
+        const bookings = JSON.parse(localStorage.getItem('active_bookings') || '[]');
+        bookings.push(booking);
+        localStorage.setItem('active_bookings', JSON.stringify(bookings));
+        refreshBookingUI();
+        showSystemToast('Бронь сохранена локально до восстановления связи');
+    }
 }
 
 async function deleteBooking(id) {
-    try { await fetch(`/api/bookings/${id}`, { method: 'DELETE' }); await syncAllData(); }
-    catch (error) { showSystemToast('Не удалось удалить бронь'); }
+    try {
+        const response = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('booking');
+        await syncAllData();
+    } catch (error) {
+        const bookings = JSON.parse(localStorage.getItem('active_bookings') || '[]').filter(booking => booking.id !== id);
+        localStorage.setItem('active_bookings', JSON.stringify(bookings));
+        refreshBookingUI();
+        showSystemToast('Бронь удалена локально до восстановления связи');
+    }
 }
+
+window.addEventListener('load', () => {
+    const savedDenominations = JSON.parse(localStorage.getItem('cash_denominations') || '{}');
+    document.querySelectorAll('.denom-count').forEach(input => {
+        const value = savedDenominations[input.dataset.val];
+        if (value !== undefined) input.value = value;
+        input.addEventListener('input', () => {
+            const next = {};
+            document.querySelectorAll('.denom-count').forEach(item => { next[item.dataset.val] = item.value; });
+            localStorage.setItem('cash_denominations', JSON.stringify(next));
+            calcCashFromQty();
+        });
+    });
+    calcCashFromQty();
+});
 </script>
 
 </body>
