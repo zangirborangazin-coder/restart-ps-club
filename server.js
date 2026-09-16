@@ -93,11 +93,13 @@ async function initializeDatabase() {
 		CREATE TABLE IF NOT EXISTS cash_balance (
 			id INTEGER PRIMARY KEY CHECK (id = 1),
 			amount INTEGER NOT NULL DEFAULT 0,
+			denominations JSONB NOT NULL DEFAULT '{}'::jsonb,
 			user_name TEXT NOT NULL,
 			date_key TEXT NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`);
+	await pool.query(`ALTER TABLE cash_balance ADD COLUMN IF NOT EXISTS denominations JSONB NOT NULL DEFAULT '{}'::jsonb`);
 	for (const [name, login, password, role, fixed] of defaultEmployees) {
 		await pool.query(
 			`INSERT INTO employees (name, login, password, role, fixed)
@@ -295,22 +297,22 @@ app.delete('/api/presence/:sessionId', async (req, res) => {
 });
 
 app.get('/api/cash-balance', async (_req, res) => {
-	if (!databaseAvailable) return res.json(memoryCashBalance || { amount: 0, user: '', dateKey: '', updatedAt: '' });
+	if (!databaseAvailable) return res.json(memoryCashBalance || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
 	try {
-		const { rows } = await pool.query('SELECT amount, user_name AS user, date_key, updated_at FROM cash_balance WHERE id = 1');
-		res.json(rows[0] || { amount: 0, user: '', dateKey: '', updatedAt: '' });
+		const { rows } = await pool.query('SELECT amount, denominations, user_name AS user, date_key, updated_at FROM cash_balance WHERE id = 1');
+		res.json(rows[0] || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
 	} catch (error) { console.error('GET /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось загрузить кассу' }); }
 });
 
 app.post('/api/cash-balance', async (req, res) => {
-	const { amount, user, dateKey } = req.body || {};
+	const { amount, denominations = {}, user, dateKey } = req.body || {};
 	if (!Number.isFinite(Number(amount)) || Number(amount) < 0 || !user || !dateKey) return res.status(400).json({ error: 'Некорректная касса' });
 	if (!databaseAvailable) {
-		memoryCashBalance = { amount: Number(amount), user, dateKey, updatedAt: new Date().toLocaleTimeString('ru-RU') };
+		memoryCashBalance = { amount: Number(amount), denominations, user, dateKey, updatedAt: new Date().toLocaleTimeString('ru-RU') };
 		return res.json(memoryCashBalance);
 	}
 	try {
-		const { rows } = await pool.query(`INSERT INTO cash_balance (id, amount, user_name, date_key) VALUES (1,$1,$2,$3) ON CONFLICT (id) DO UPDATE SET amount=$1,user_name=$2,date_key=$3,updated_at=NOW() RETURNING amount,user_name AS user,date_key,updated_at`, [amount, user, dateKey]);
+		const { rows } = await pool.query(`INSERT INTO cash_balance (id, amount, denominations, user_name, date_key) VALUES (1,$1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET amount=$1,denominations=$2,user_name=$3,date_key=$4,updated_at=NOW() RETURNING amount,denominations,user_name AS user,date_key,updated_at`, [amount, JSON.stringify(denominations), user, dateKey]);
 		res.json(rows[0]);
 	} catch (error) { console.error('POST /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось сохранить кассу' }); }
 });
