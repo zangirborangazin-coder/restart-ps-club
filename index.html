@@ -381,6 +381,44 @@
         .owner-table th, .owner-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; font-size: 12px; }
         .owner-table th { color: #94a3b8; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; }
         .access-warning { color: #fbbf24; font-size: 12px; margin-top: 10px; line-height: 1.5; }
+
+        #menu-toggle { display: none; }
+
+        @media (max-width: 700px) {
+            nav {
+                min-height: 60px;
+                height: auto;
+                padding: 8px 12px;
+                justify-content: space-between;
+                flex-wrap: wrap;
+            }
+
+            #menu-toggle {
+                display: none;
+                border: 1px solid rgba(125, 211, 252, .3);
+                background: rgba(56, 189, 248, .12);
+                color: #7dd3fc;
+                border-radius: 12px;
+                padding: 10px 14px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            nav.mobile-menu-ready #menu-toggle { display: block; }
+            nav.mobile-menu-ready .nav-link { display: none; }
+            nav.mobile-menu-ready.menu-open .nav-link { display: block; }
+            nav.mobile-menu-ready.menu-open { justify-content: center; gap: 4px; }
+            nav.mobile-menu-ready.menu-open #menu-toggle { width: 100%; margin-bottom: 4px; }
+            nav.mobile-menu-ready .nav-link { line-height: 44px; padding: 0 14px; }
+
+            #cash-page .grid { grid-template-columns: 1fr; gap: 1rem; }
+            #cash-page .stealth-card { min-width: 0; max-width: none; }
+            #cash-page .grid::before { display: none; }
+            .page { padding: 24px 16px !important; }
+            .section-head { align-items: flex-start; flex-direction: column; }
+            .stealth-card { border-radius: 20px; }
+            .timer-minimal { font-size: 2rem; }
+        }
     </style>
 </head>
 <body>
@@ -422,6 +460,7 @@
 </div>
 
 <nav>
+    <button id="menu-toggle" type="button" onclick="toggleMobileMenu()">Открыть меню</button>
     <div class="nav-link active" onclick="showPage('main-page', this)">Управление</div>
     <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
     <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
@@ -912,7 +951,7 @@ function trackAction(message) {
     function refreshBookingUI() {
     const bookings = JSON.parse(localStorage.getItem('active_bookings') || '[]');
     const navBtn = document.getElementById('nav-booking-btn'), listBody = document.getElementById('booking-list-body');
-    if(navBtn) navBtn.classList.toggle('hidden', bookings.length === 0);
+    if(navBtn) navBtn.classList.toggle('hidden', bookings.length === 0 && !isOwnerOrIT());
     if(!listBody) return;
     listBody.innerHTML = "";
     
@@ -1068,6 +1107,9 @@ function trackAction(message) {
         if (btn) btn.classList.add('active');
         if (id === 'booking-list-page') refreshBookingUI();
         if (id === 'owner-page') renderOwnerPanel();
+        document.querySelector('nav')?.classList.remove('menu-open');
+        const menuToggle = document.getElementById('menu-toggle');
+        if (menuToggle) menuToggle.innerText = 'Открыть меню';
     }
 
     function parseTimeParts(t) {
@@ -1336,6 +1378,12 @@ window.addEventListener('load', () => {
     fetchEmployees();
 });
 function logout() { sessionStorage.removeItem('restart_user'); location.reload(); }
+function toggleMobileMenu() {
+    const nav = document.querySelector('nav');
+    if (!nav.classList.contains('mobile-menu-ready')) return;
+    nav.classList.toggle('menu-open');
+    document.getElementById('menu-toggle').innerText = nav.classList.contains('menu-open') ? 'Скрыть меню' : 'Открыть меню';
+}
 function configureAccess() {
     if (!currentUser) return;
     currentUser.role = getUserRole(currentUser);
@@ -1344,6 +1392,7 @@ function configureAccess() {
     document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
     ['session-user', 'logout-btn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
     if (isOwnerOrIT()) {
+        document.querySelector('nav').classList.add('mobile-menu-ready');
         document.getElementById('nav-owner-btn').classList.remove('hidden');
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
@@ -1653,6 +1702,141 @@ window.addEventListener('load', () => {
     if (previousCash) previousCash.value = localStorage.getItem('last_cash_balance') || '0';
     fetchEmployees();
 });
+
+// --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ ---
+async function syncAllData() {
+    try {
+        const resRuns = await fetch('/api/runs');
+        if (resRuns.ok) {
+            const activeRuns = await resRuns.json();
+            const activeKeys = new Set(activeRuns.map(run => run.key));
+            ['std', 'promo', 'open'].forEach(type => {
+                for (let i = 1; i <= 4; i++) {
+                    const key = `${type}-${i}`;
+                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
+                }
+            });
+            activeRuns.forEach(run => {
+                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+            });
+        }
+
+        const resBookings = await fetch('/api/bookings');
+        if (resBookings.ok) {
+            localStorage.setItem('active_bookings', JSON.stringify(await resBookings.json()));
+            refreshBookingUI();
+        }
+
+        const resPayments = await fetch('/api/payments');
+        if (resPayments.ok) {
+            const serverPayments = await resPayments.json();
+            payments = {};
+            serverPayments.forEach(payment => {
+                payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
+            });
+            localStorage.setItem('saved_payments', JSON.stringify(payments));
+            syncPaymentsToFinance();
+            if (isOwnerOrIT()) renderOwnerPanel();
+        }
+    } catch (error) {
+        console.warn('Ошибка синхронизации:', error);
+    }
+}
+
+setInterval(syncAllData, 2000);
+
+async function startControl(type, id) {
+    const key = `${type}-${id}`;
+    const tsInput = document.getElementById(`ts-${key}`);
+    if (!tsInput.value) return;
+    markShiftOpened();
+    tsInput.value = normalizeTimeString(tsInput.value);
+    const startTime = getM(tsInput.value);
+    let endTime = null;
+    const isOpen = type === 'open';
+    if (type === 'std') {
+        const endInput = document.getElementById(`te-${key}`);
+        if (endInput.value) { endInput.value = normalizeTimeString(endInput.value); endTime = getM(endInput.value); }
+    } else if (type === 'promo') {
+        endTime = startTime + 180;
+    }
+    const runData = { key, type, id, startTime, endTime, isOpen };
+    try {
+        const response = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runData) });
+        if (!response.ok) throw new Error('Не удалось сохранить сессию');
+        localStorage.setItem(`run_${key}`, JSON.stringify(runData));
+        renderActiveState(key, type, id, startTime, endTime, isOpen);
+    } catch (error) {
+        showSystemToast('Не удалось запустить сессию');
+    }
+}
+
+async function resetCard(type, id, notifyServer = true) {
+    const key = `${type}-${id}`;
+    clearInterval(intervals[key]);
+    localStorage.removeItem(`run_${key}`);
+    if (notifyServer) await fetch(`/api/runs/${key}`, { method: 'DELETE' }).catch(() => {});
+    const status = document.getElementById(`st-${key}`);
+    if (status) { status.innerHTML = '<span class="status-dot dot-free"></span>Ожидание'; status.className = 'text-[10px] font-semibold text-gray-500 uppercase tracking-wider'; }
+    const timer = document.getElementById(`tm-${key}`);
+    if (timer) { timer.innerText = '00:00:00'; timer.style.color = '#fff'; }
+    const roomId = key.split('-').pop();
+    const monitorCard = document.getElementById(`tablo-card-${roomId}`);
+    const monitorTimer = document.getElementById(`tablo-tm-${roomId}`);
+    [monitorCard].forEach(element => element?.classList.remove('timer-warning', 'timer-expired'));
+    if (monitorTimer) monitorTimer.style.color = '#fff';
+    const price = document.getElementById(`sm-${key}`);
+    if (price) price.innerText = type === 'promo' ? '3000' : '0';
+}
+
+async function savePayment(key) {
+    const cash = parseInt(document.getElementById(`cash-${key}`).value) || 0;
+    const qr = parseInt(document.getElementById(`qr-${key}`).value) || 0;
+    const runData = JSON.parse(localStorage.getItem(`run_${key}`) || 'null');
+    if (!runData) return alert('Сессия не запущена');
+    let expected = 0;
+    let duration = '0час';
+    const diff = runData.endTime !== null && runData.endTime !== undefined ? (runData.endTime - runData.startTime + 1440) % 1440 : 0;
+    if (runData.type === 'std') { expected = Math.ceil((diff / 60) * RATE / 50) * 50; duration = `${Math.round(diff / 60)}час`; }
+    else if (runData.type === 'promo') { expected = 3000; duration = '3час'; }
+    else if (runData.type === 'open') { const now = new Date(); const openDiff = (now.getHours() * 60 + now.getMinutes() - runData.startTime + 1440) % 1440; expected = Math.ceil((openDiff / 60) * RATE / 50) * 50; duration = `${Math.round(openDiff / 60)}час`; }
+    if (expected > 0 && cash + qr !== expected) return alert(`ОШИБКА! Нужно: ${expected} ₸`);
+    const startStr = `${String(Math.floor(runData.startTime / 60)).padStart(2, '0')}:${String(runData.startTime % 60).padStart(2, '0')}`;
+    const endStr = runData.endTime === null || runData.endTime === undefined ? 'Открыт' : `${String(Math.floor(runData.endTime / 60)).padStart(2, '0')}:${String(runData.endTime % 60).padStart(2, '0')}`;
+    const payment = { id: Date.now(), cash, qr, timestamp: Date.now(), dateKey: getLocalDateKey(), time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), startStr, endStr, total: expected, duration, zone: key.toUpperCase().replace('STD', 'VIP') };
+    try {
+        const response = await fetch('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) });
+        if (!response.ok) throw new Error('payment');
+        document.getElementById(`cash-${key}`).value = '';
+        document.getElementById(`qr-${key}`).value = '';
+        await syncAllData();
+        showSystemToast('Оплата добавлена в общую кассу');
+    } catch (error) {
+        showSystemToast('Не удалось сохранить оплату');
+    }
+}
+
+async function addBooking() {
+    const name = document.getElementById('b-name');
+    const phone = document.getElementById('b-phone');
+    const time = document.getElementById('b-time');
+    const room = document.getElementById('b-room');
+    if (!name.value || !time.value) return alert('Заполните поля!');
+    const booking = { id: Date.now(), name: name.value, phone: phone.value, time: time.value, room: room.value };
+    try {
+        const response = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(booking) });
+        if (!response.ok) throw new Error('booking');
+        name.value = ''; phone.value = '+7 '; time.value = '';
+        await syncAllData();
+    } catch (error) { showSystemToast('Не удалось сохранить бронь'); }
+}
+
+async function deleteBooking(id) {
+    try { await fetch(`/api/bookings/${id}`, { method: 'DELETE' }); await syncAllData(); }
+    catch (error) { showSystemToast('Не удалось удалить бронь'); }
+}
 </script>
 
 </body>
