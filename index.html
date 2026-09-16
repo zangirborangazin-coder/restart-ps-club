@@ -381,7 +381,7 @@
         .owner-table th, .owner-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; font-size: 12px; }
         .owner-table th { color: #94a3b8; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; }
         .access-warning { color: #fbbf24; font-size: 12px; margin-top: 10px; line-height: 1.5; }
-        .presence-link { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #86efac !important; }
+        .presence-link { max-width: 280px; min-width: 180px; height: auto !important; padding: 8px 16px !important; line-height: 1.45 !important; white-space: normal; color: #86efac !important; text-align: left; }
         .presence-link::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #32d74b; box-shadow: 0 0 8px #32d74b; vertical-align: middle; }
 
         #menu-toggle { display: none; }
@@ -1400,9 +1400,15 @@ function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
     if (!element || !currentUser) return;
     const names = users.map(user => `${user.name} (${user.role})`);
-    element.innerText = names.length ? `Онлайн: ${names.join(', ')}` : 'Онлайн: только вы';
+    element.innerHTML = names.length
+        ? `<div>Онлайн:</div>${names.map(name => `<div>• ${escapeHtml(name)}</div>`).join('')}`
+        : '<div>Онлайн:</div><div>• только вы</div>';
     element.title = names.join('\n') || 'Пользователи онлайн';
     element.classList.remove('hidden');
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 }
 
 async function syncPresence() {
