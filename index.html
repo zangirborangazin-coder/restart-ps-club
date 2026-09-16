@@ -244,7 +244,7 @@
             background: rgba(255,255,255,0.03) !important;
         }
 
-        #cash-page .stealth-card .text-[10px] {
+        #cash-page .stealth-card .text-\[10px\] {
             color: #94a3b8;
         }
 
@@ -1333,6 +1333,7 @@ function configureAccess() {
     if (isOwnerOrIT()) {
         document.getElementById('nav-owner-btn').classList.remove('hidden');
         document.getElementById('nav-cash-btn').classList.remove('hidden');
+        document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
     if (currentUser.role === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
     document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = currentUser.role === 'admin'; input.disabled = currentUser.role === 'admin'; });
