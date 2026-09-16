@@ -1257,45 +1257,62 @@ const defaultEmployees = [
     { name: 'Нурбол', login: 'Nurbol', password: 'Asd1230123', role: 'owner', fixed: true },
     { name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true }
 ];
-let remoteEmployees = [];
-async function fetchEmployees() {
-    try {
-        const response = await fetch('/api/employees');
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        remoteEmployees = await response.json();
-        renderOwnerPanel();
-    } catch (error) {
-        console.error('Ошибка получения сотрудников:', error);
-    }
-}
-const employees = () => remoteEmployees;
-let currentUser = JSON.parse(sessionStorage.getItem('restart_user') || 'null');
-let ADMIN_NAME = currentUser?.name || '';
+// Значения по умолчанию доступны сразу при загрузке страницы
+// 1. Дефолтные аккаунты доступны СРАЗУ (вход сработает мгновенно)
+let remoteEmployees = [
+    { id: 1, name: 'Мади', login: 'Madi', password: 'Asd1230123', role: 'owner', fixed: true },
+    { id: 2, name: 'Еламан', login: 'Elaman', password: 'Asd1230123', role: 'owner', fixed: true },
+    { id: 3, name: 'Нурбол', login: 'Nurbol', password: 'Asd1230123', role: 'owner', fixed: true },
+    { id: 4, name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true }
+];
 
-function isOwnerOrIT() { return currentUser && ['owner', 'it'].includes(currentUser.role); }
-function adminAccessOpen() {
-    const total = new Date().getHours() * 60 + new Date().getMinutes();
-    return total >= 14 * 60 + 30 || total < 3 * 60 + 30;
+// Геттер сотрудников
+const employees = () => remoteEmployees;
+
+// 2. Фоновая загрузка дополнительных сотрудников из базы PostgreSQL
+async function fetchEmployees() {
+  try {
+    const res = await fetch('/api/employees');
+    if (res.ok) {
+      const dbEmployees = await res.json();
+      if (Array.isArray(dbEmployees) && dbEmployees.length > 0) {
+        // Объединяем дефолтных и загруженных из базы
+        const defaultLogins = new Set(remoteEmployees.map(e => e.login));
+        const newFromDb = dbEmployees.filter(e => !defaultLogins.has(e.login));
+        remoteEmployees = [...remoteEmployees, ...newFromDb];
+      }
+      if (typeof renderOwnerPanel === 'function') {
+        renderOwnerPanel();
+      }
+    }
+  } catch (e) {
+    console.warn("Фоновая загрузка из БД пока недоступна, используются дефолтные аккаунты", e);
+  }
 }
-function recordAccessAttempt(login) {
-    const attempts = JSON.parse(localStorage.getItem('access_attempts') || '[]');
-    attempts.push({ login, at: new Date().toISOString() });
-    localStorage.setItem('access_attempts', JSON.stringify(attempts.slice(-100)));
-}
+
+// 3. Надежная функция входа
 function login(event) {
     event.preventDefault();
-    if (!remoteEmployees.length) return alert('Сотрудники ещё загружаются. Повторите вход через несколько секунд.');
     const loginValue = document.getElementById('login-user').value.trim();
     const passwordValue = document.getElementById('login-password').value;
-    const user = employees().find(item => item.login === loginValue && item.password === passwordValue);
     const error = document.getElementById('login-error');
-    if (!user) { error.innerText = 'Неверный логин или пароль.'; error.classList.remove('hidden'); return; }
+
+    const userList = employees();
+    const user = userList.find(item => item.login === loginValue && item.password === passwordValue);
+
+    if (!user) { 
+        error.innerText = 'Неверный логин или пароль.'; 
+        error.classList.remove('hidden'); 
+        return; 
+    }
+
     if (user.role === 'admin' && !adminAccessOpen()) {
         recordAccessAttempt(loginValue);
-        error.innerText = 'Доступ администратора закрыт. Разрешённое время: 14:30-03:30. Владельцы получили предупреждение.';
+        error.innerText = 'Доступ администратора закрыт. Разрешённое время: 14:30-03:30.';
         error.classList.remove('hidden');
         return;
     }
+
     currentUser = user;
     ADMIN_NAME = user.name;
     sessionStorage.setItem('restart_user', JSON.stringify(user));
@@ -1303,6 +1320,11 @@ function login(event) {
     configureAccess();
     trackAction('Вход в систему');
 }
+
+// Запускаем фоновую синхронизацию при загрузке
+window.addEventListener('load', () => {
+    fetchEmployees();
+});
 function logout() { sessionStorage.removeItem('restart_user'); location.reload(); }
 function configureAccess() {
     if (!currentUser) return;
