@@ -300,6 +300,25 @@ app.post('/api/payments', async (req, res) => {
 	} catch (error) { console.error('POST /api/payments:', error); res.status(500).json({ error: 'Не удалось сохранить оплату' }); }
 });
 
+app.put('/api/payments/:id', async (req, res) => {
+	const { qr, cash, total } = req.body || {};
+	if (!Number.isFinite(Number(qr)) || !Number.isFinite(Number(cash)) || !Number.isFinite(Number(total)) || qr < 0 || cash < 0) return res.status(400).json({ error: 'Некорректные суммы' });
+	if (!databaseAvailable) {
+		const payment = memoryPayments.find(item => item.id === Number(req.params.id));
+		if (!payment) return res.status(404).json({ error: 'Оплата не найдена' });
+		Object.assign(payment, { qr: Number(qr), cash: Number(cash), total: Number(total) });
+		return res.json(payment);
+	}
+	try {
+		const { rows } = await pool.query('UPDATE payments SET qr = $1, cash = $2, total = $3 WHERE id = $4 RETURNING *', [qr, cash, total, req.params.id]);
+		if (!rows[0]) return res.status(404).json({ error: 'Оплата не найдена' });
+		res.json(rows[0]);
+	} catch (error) {
+		console.error('PUT /api/payments/:id:', error);
+		res.status(500).json({ error: 'Не удалось изменить оплату' });
+	}
+});
+
 app.delete('/api/payments/date/:dateKey', async (req, res) => {
 	if (!databaseAvailable) {
 		memoryPayments = memoryPayments.filter(payment => payment.dateKey !== req.params.dateKey);
