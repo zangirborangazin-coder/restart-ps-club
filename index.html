@@ -7,10 +7,6 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <!-- Основной SVG-фавикон (масштабируется без потери качества) -->
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<!-- Резервный вариант для старых браузеров -->
-<link rel="alternate icon" href="favicon.ico">
     <style>
         :root { 
             --bg: #000000;
@@ -1789,36 +1785,49 @@ async function syncAllData() {
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
-            if (activeRuns.length > 0) {
-                const activeKeys = new Set(activeRuns.map(run => run.key));
-                ['std', 'promo', 'open'].forEach(type => {
-                    for (let i = 1; i <= 4; i++) {
-                        const key = `${type}-${i}`;
-                        if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
+            const activeKeys = new Set(activeRuns.map(run => run.key));
+
+            // 1. Сбрасываем завершенные комнаты (теперь работает, даже если 0 активных комнат)
+            ['std', 'promo', 'open'].forEach(type => {
+                for (let i = 1; i <= 4; i++) {
+                    const key = `${type}-${i}`;
+                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) {
+                        resetCard(type, i, false);
                     }
-                });
-                activeRuns.forEach(run => {
-                    const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
-                    localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
-                    renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
-                });
-            }
+                }
+            });
+
+            // 2. Отрисовываем текущие активные сессии
+            activeRuns.forEach(run => {
+                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+            });
         }
 
+        // 3. Синхронизация броней
         const resBookings = await fetch('/api/bookings');
         if (resBookings.ok) {
             const serverBookings = await resBookings.json();
-            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
+            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) {
+                localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
+            }
             refreshBookingUI();
         }
 
+        // 4. Синхронизация кассы и платежей
         const resPayments = await fetch('/api/payments');
         if (resPayments.ok) {
             const serverPayments = await resPayments.json();
             if (serverPayments.length > 0 || Object.keys(payments).length === 0) {
                 payments = {};
                 serverPayments.forEach(payment => {
-                    payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
+                    payments[payment.id] = { 
+                        ...payment, 
+                        dateKey: payment.date_key || payment.dateKey, 
+                        startStr: payment.start_str || payment.startStr, 
+                        endStr: payment.end_str || payment.endStr 
+                    };
                 });
                 localStorage.setItem('saved_payments', JSON.stringify(payments));
             }
@@ -1843,13 +1852,20 @@ async function startControl(type, id) {
     const isOpen = type === 'open';
     if (type === 'std') {
         const endInput = document.getElementById(`te-${key}`);
-        if (endInput.value) { endInput.value = normalizeTimeString(endInput.value); endTime = getM(endInput.value); }
+        if (endInput.value) { 
+            endInput.value = normalizeTimeString(endInput.value); 
+            endTime = getM(endInput.value); 
+        }
     } else if (type === 'promo') {
         endTime = startTime + 180;
     }
     const runData = { key, type, id, startTime, endTime, isOpen };
     try {
-        const response = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runData) });
+        const response = await fetch('/api/runs', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(runData) 
+        });
         if (!response.ok) throw new Error('Не удалось сохранить сессию');
         localStorage.setItem(`run_${key}`, JSON.stringify(runData));
         renderActiveState(key, type, id, startTime, endTime, isOpen);
