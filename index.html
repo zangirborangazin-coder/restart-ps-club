@@ -618,7 +618,7 @@
             <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Касса</th></tr></thead><tbody id="history-body"></tbody></table></div>
         </div>
         <div class="stealth-card p-6">
-            <h2 class="font-bold text-lg mb-5">Оплаты клиентов сегодня</h2>
+            <div class="flex items-center justify-between gap-3 mb-5"><h2 class="font-bold text-lg">Оплаты клиентов сегодня</h2><button class="text-xs text-red-400 font-bold" onclick="clearTodayPayments()">Очистить</button></div>
             <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Время</th><th>Зона</th><th>QR</th><th>Наличные</th><th>Итого</th></tr></thead><tbody id="payments-today-body"></tbody></table></div>
             <div id="payments-today-total" class="text-right font-bold mt-4">Сегодня: 0 ₸</div>
         </div>
@@ -1555,6 +1555,25 @@ function renderOwnerPanel() {
     document.getElementById('employees-head').innerHTML = canViewCredentials ? '<tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Действие</th></tr>' : '<tr><th>Имя</th><th>Роль</th><th>Действие</th></tr>';
     document.getElementById('employees-body').innerHTML = visibleEmployees.map(item => `<tr><td>${item.name}</td>${canViewCredentials ? `<td>${item.login}</td><td>${item.password}</td>` : ''}<td>${item.role}</td><td><button class="text-blue-400 mr-3" onclick="editEmployee(${item.id})">Изменить</button>${item.fixed ? '<span class="text-slate-500">Системный</span>' : `<button class="text-red-400" onclick="removeEmployee(${item.id})">Удалить</button>`}</td></tr>`).join('');
     renderRevenueCalendar();
+}
+async function clearTodayPayments() {
+    if (!isOwnerOrIT()) return showSystemToast('Очистить оплаты может только владелец или IT');
+    if (!confirm('Удалить все оплаты за сегодня? История смен не изменится.')) return;
+    const today = getLocalDateKey();
+    try {
+        const response = await fetch(`/api/payments/date/${today}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('payments');
+        Object.keys(payments).forEach(id => {
+            const payment = payments[id];
+            if ((payment.dateKey || getLocalDateKey(new Date(payment.timestamp || 0))) === today) delete payments[id];
+        });
+        localStorage.setItem('saved_payments', JSON.stringify(payments));
+        syncPaymentsToFinance();
+        renderOwnerPanel();
+        showSystemToast('Оплаты за сегодня очищены');
+    } catch (error) {
+        showSystemToast('Не удалось очистить оплаты');
+    }
 }
 function addExpense() {
     if (!isOwnerOrIT()) return;
