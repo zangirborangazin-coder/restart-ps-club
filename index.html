@@ -1490,6 +1490,7 @@ async function fetchCashBalance() {
         if (response.ok) {
             currentCashBalance = await response.json();
             localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+            if (currentCashBalance.denominations) applyDenominationState(currentCashBalance.denominations);
             if (isOwnerOrIT()) renderOwnerPanel();
         }
     } catch (error) { console.warn('Не удалось загрузить фактическую кассу:', error); }
@@ -1498,7 +1499,8 @@ async function saveCashBalance() {
     if (!currentUser || !['admin', 'owner', 'it'].includes(getUserRole())) return;
     let total = 0;
     document.querySelectorAll('.denom-count').forEach(input => { total += (parseInt(input.value) || 0) * parseInt(input.dataset.val); });
-    const payload = { amount: total, user: currentUser.name, dateKey: getLocalDateKey() };
+    const denominations = getDenominationState();
+    const payload = { amount: total, denominations, user: currentUser.name, dateKey: getLocalDateKey() };
     try {
         const response = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!response.ok) throw new Error('cash');
@@ -1908,6 +1910,7 @@ window.addEventListener('load', () => {
 // --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ --- // старый 
 async function syncAllData() {
     try {
+        await fetchCashBalance();
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
