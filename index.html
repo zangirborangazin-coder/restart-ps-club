@@ -381,6 +381,8 @@
         .owner-table th, .owner-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; font-size: 12px; }
         .owner-table th { color: #94a3b8; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; }
         .access-warning { color: #fbbf24; font-size: 12px; margin-top: 10px; line-height: 1.5; }
+        .presence-link { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #86efac !important; }
+        .presence-link::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #32d74b; box-shadow: 0 0 8px #32d74b; vertical-align: middle; }
 
         #menu-toggle { display: none; }
 
@@ -467,6 +469,7 @@
     <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
     <div id="nav-admin-btn" class="nav-link hidden" onclick="showPage('admin-page', this)">Меню админа</div>
     <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
+    <div id="online-users" class="nav-link presence-link hidden" title="Пользователи онлайн"></div>
     <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
     <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
 </nav>
@@ -1310,6 +1313,19 @@ let remoteEmployees = [
 
 // Геттер сотрудников
 const employees = () => remoteEmployees;
+let currentUser = JSON.parse(localStorage.getItem('restart_user') || 'null');
+let ADMIN_NAME = currentUser?.name || '';
+
+function adminAccessOpen() {
+    const minutes = new Date().getHours() * 60 + new Date().getMinutes();
+    return minutes >= 14 * 60 + 30 || minutes < 3 * 60 + 30;
+}
+
+function recordAccessAttempt(login) {
+    const attempts = JSON.parse(localStorage.getItem('access_attempts') || '[]');
+    attempts.push({ login, at: new Date().toISOString() });
+    localStorage.setItem('access_attempts', JSON.stringify(attempts.slice(-100)));
+}
 
 function getUserRole(user = currentUser) {
     return String(user?.role || '').trim().toLowerCase();
@@ -1325,24 +1341,22 @@ async function fetchEmployees() {
     const res = await fetch('/api/employees');
     if (res.ok) {
       const dbEmployees = await res.json();
-      if (Array.isArray(dbEmployees) && dbEmployees.length > 0) {
-        // Объединяем дефолтных и загруженных из базы
-        const defaultLogins = new Set(remoteEmployees.map(e => e.login));
-        const newFromDb = dbEmployees.filter(e => !defaultLogins.has(e.login));
-        remoteEmployees = [...remoteEmployees, ...newFromDb];
-      }
+            if (Array.isArray(dbEmployees)) remoteEmployees = dbEmployees;
       if (typeof renderOwnerPanel === 'function') {
         renderOwnerPanel();
       }
+            return true;
     }
   } catch (e) {
     console.warn("Фоновая загрузка из БД пока недоступна, используются дефолтные аккаунты", e);
   }
+    return false;
 }
 
 // 3. Надежная функция входа
-function login(event) {
+async function login(event) {
     event.preventDefault();
+    await fetchEmployees();
     const loginValue = document.getElementById('login-user').value.trim();
     const passwordValue = document.getElementById('login-password').value;
     const error = document.getElementById('login-error');
@@ -1356,7 +1370,7 @@ function login(event) {
         return; 
     }
 
-    if (user.role === 'admin' && !adminAccessOpen()) {
+    if (getUserRole(user) === 'admin' && !adminAccessOpen()) {
         recordAccessAttempt(loginValue);
         error.innerText = 'Доступ администратора закрыт. Разрешённое время: 14:30-03:30.';
         error.classList.remove('hidden');
@@ -1366,8 +1380,8 @@ function login(event) {
     currentUser = user;
     currentUser.role = getUserRole(currentUser);
     if (currentUser.login === 'Madi') currentUser.role = 'owner';
-    ADMIN_NAME = user.name;
-    sessionStorage.setItem('restart_user', JSON.stringify(user));
+    ADMIN_NAME = currentUser.name;
+    localStorage.setItem('restart_user', JSON.stringify(currentUser));
     document.getElementById('login-screen').classList.add('hidden');
     configureAccess();
     trackAction('Вход в систему');
@@ -1377,7 +1391,43 @@ function login(event) {
 window.addEventListener('load', () => {
     fetchEmployees();
 });
-function logout() { sessionStorage.removeItem('restart_user'); location.reload(); }
+function logout() { localStorage.removeItem('restart_user'); location.reload(); }
+let presenceInterval = null;
+const presenceSessionId = sessionStorage.getItem('presence_session_id') || crypto.randomUUID();
+sessionStorage.setItem('presence_session_id', presenceSessionId);
+
+function renderOnlineUsers(users) {
+    const element = document.getElementById('online-users');
+    if (!element || !currentUser) return;
+    const names = users.map(user => `${user.name} (${user.role})`);
+    element.innerText = names.length ? `Онлайн: ${names.join(', ')}` : 'Онлайн: только вы';
+    element.title = names.join('\n') || 'Пользователи онлайн';
+    element.classList.remove('hidden');
+}
+
+async function syncPresence() {
+    if (!currentUser) return;
+    const payload = { sessionId: presenceSessionId, name: currentUser.name, login: currentUser.login, role: getUserRole() };
+    try {
+        await fetch('/api/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const response = await fetch('/api/presence');
+        if (response.ok) renderOnlineUsers(await response.json());
+    } catch (error) {
+        console.warn('Ошибка синхронизации онлайн-статуса:', error);
+    }
+}
+
+function startPresence() {
+    if (!currentUser) return;
+    clearInterval(presenceInterval);
+    syncPresence();
+    presenceInterval = setInterval(syncPresence, 5000);
+}
+
+window.addEventListener('beforeunload', () => {
+    fetch(`/api/presence/${presenceSessionId}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+});
+
 function toggleMobileMenu() {
     const nav = document.querySelector('nav');
     if (!nav.classList.contains('mobile-menu-ready')) return;
@@ -1388,7 +1438,7 @@ function configureAccess() {
     if (!currentUser) return;
     currentUser.role = getUserRole(currentUser);
     if (currentUser.login === 'Madi') currentUser.role = 'owner';
-    sessionStorage.setItem('restart_user', JSON.stringify(currentUser));
+    localStorage.setItem('restart_user', JSON.stringify(currentUser));
     document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
     ['session-user', 'logout-btn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
     if (isOwnerOrIT()) {
@@ -1399,6 +1449,7 @@ function configureAccess() {
     }
     if (getUserRole() === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
     document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = getUserRole() === 'admin'; input.disabled = getUserRole() === 'admin'; });
+    startPresence();
     renderOwnerPanel();
 }
 function initAccess() {
