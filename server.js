@@ -22,6 +22,7 @@ let memoryEmployees = defaultEmployees.map(([name, login, password, role, fixed]
 let memoryRuns = [];
 let memoryBookings = [];
 let memoryPayments = [];
+let memoryPresence = [];
 
 async function initializeDatabase() {
 	if (!pool) {
@@ -76,6 +77,15 @@ async function initializeDatabase() {
 			total INTEGER NOT NULL,
 			duration TEXT NOT NULL,
 			zone TEXT NOT NULL
+		)
+	`);
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS online_presence (
+			session_id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			login TEXT NOT NULL,
+			role TEXT NOT NULL,
+			last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`);
 	for (const [name, login, password, role, fixed] of defaultEmployees) {
@@ -226,6 +236,52 @@ app.delete('/api/bookings/:id', async (req, res) => {
 	if (!databaseAvailable) { memoryBookings = memoryBookings.filter(item => item.id !== Number(req.params.id)); return res.status(204).end(); }
 	try { await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]); res.status(204).end(); }
 	catch (error) { console.error('DELETE /api/bookings:', error); res.status(500).json({ error: 'Не удалось удалить бронь' }); }
+});
+
+app.get('/api/presence', async (_req, res) => {
+	if (!databaseAvailable) {
+		const activeSince = Date.now() - 20000;
+		memoryPresence = memoryPresence.filter(user => user.last_seen > activeSince);
+		return res.json(memoryPresence);
+	}
+	try {
+		const { rows } = await pool.query(`SELECT session_id, name, login, role, EXTRACT(EPOCH FROM last_seen) * 1000 AS last_seen FROM online_presence WHERE last_seen > NOW() - INTERVAL '20 seconds' ORDER BY name`);
+		res.json(rows);
+	} catch (error) {
+		console.error('GET /api/presence:', error);
+		res.status(500).json({ error: 'Не удалось загрузить онлайн-статусы' });
+	}
+});
+
+app.post('/api/presence', async (req, res) => {
+	const { sessionId, name, login, role } = req.body || {};
+	if (!sessionId || !name || !login || !role) return res.status(400).json({ error: 'Некорректный онлайн-статус' });
+	if (!databaseAvailable) {
+		const user = { session_id: sessionId, name, login, role, last_seen: Date.now() };
+		memoryPresence = memoryPresence.filter(item => item.session_id !== sessionId).concat(user);
+		return res.status(204).end();
+	}
+	try {
+		await pool.query(`INSERT INTO online_presence (session_id, name, login, role, last_seen) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (session_id) DO UPDATE SET name=$2,login=$3,role=$4,last_seen=NOW()`, [sessionId, name, login, role]);
+		res.status(204).end();
+	} catch (error) {
+		console.error('POST /api/presence:', error);
+		res.status(500).json({ error: 'Не удалось сохранить онлайн-статус' });
+	}
+});
+
+app.delete('/api/presence/:sessionId', async (req, res) => {
+	if (!databaseAvailable) {
+		memoryPresence = memoryPresence.filter(user => user.session_id !== req.params.sessionId);
+		return res.status(204).end();
+	}
+	try {
+		await pool.query('DELETE FROM online_presence WHERE session_id = $1', [req.params.sessionId]);
+		res.status(204).end();
+	} catch (error) {
+		console.error('DELETE /api/presence:', error);
+		res.status(500).json({ error: 'Не удалось завершить онлайн-сессию' });
+	}
 });
 
 app.get('/api/payments', async (_req, res) => {
