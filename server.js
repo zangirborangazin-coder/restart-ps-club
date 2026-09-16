@@ -300,6 +300,20 @@ app.post('/api/payments', async (req, res) => {
 	} catch (error) { console.error('POST /api/payments:', error); res.status(500).json({ error: 'Не удалось сохранить оплату' }); }
 });
 
+app.delete('/api/payments/date/:dateKey', async (req, res) => {
+	if (!databaseAvailable) {
+		memoryPayments = memoryPayments.filter(payment => payment.dateKey !== req.params.dateKey);
+		return res.status(204).end();
+	}
+	try {
+		await pool.query('DELETE FROM payments WHERE date_key = $1', [req.params.dateKey]);
+		res.status(204).end();
+	} catch (error) {
+		console.error('DELETE /api/payments/date:', error);
+		res.status(500).json({ error: 'Не удалось очистить оплаты' });
+	}
+});
+
 initializeDatabase()
 	.then(() => app.listen(port, () => console.log(`RESTART is running on port ${port}`)))
 	.catch(error => { console.error('Ошибка инициализации:', error); app.listen(port, () => console.log(`RESTART is running on port ${port}`)); });
