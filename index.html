@@ -531,6 +531,7 @@
             <div class="mt-6 p-4 bg-white/5 rounded-xl text-center">
                 <div class="text-[10px] text-gray-500 uppercase">Итого наличных</div>
                 <div id="cash-from-qty-total" class="text-xl font-bold font-mono text-white">0 ₸</div>
+                <button class="btn-stealth w-full mt-4" onclick="saveCashBalance()">Сохранить кассу</button>
             </div>
         </div>
 
@@ -607,6 +608,7 @@
         <div class="owner-stat"><div class="text-xs text-slate-400">Неделя</div><div id="owner-week" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Месяц</div><div id="owner-month" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Расходы</div><div id="owner-expenses-total" class="text-2xl font-black mt-2">0 ₸</div></div>
+        <div class="owner-stat"><div class="text-xs text-slate-400">Фактическая наличная касса</div><div id="owner-cash-balance" class="text-2xl font-black mt-2">0 ₸</div><div id="owner-cash-updated" class="text-[10px] text-slate-500 mt-1"></div></div>
     </div>
     <div class="stealth-card p-6 mb-8">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1110,7 +1112,7 @@ function trackAction(message) {
 
     function showPage(id, btn) {
         if (id === 'owner-page' && !isOwnerOrIT()) { showSystemToast('Доступ только владельцу или IT'); return; }
-        if (id === 'cash-page' && !isOwnerOrIT()) { showSystemToast('Касса доступна только владельцу или IT'); return; }
+        if (id === 'cash-page' && !isOwnerOrIT() && getUserRole() !== 'admin') { showSystemToast('Касса доступна только сотрудникам смены'); return; }
         if (id === 'admin-page' && (!currentUser || currentUser.role !== 'admin')) { showSystemToast('Меню доступно только администратору'); return; }
         document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
@@ -1461,9 +1463,15 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
+    if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
     if (getUserRole() === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
-    document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = getUserRole() === 'admin'; input.disabled = getUserRole() === 'admin'; });
+    document.querySelectorAll('#cash-page input').forEach(input => {
+        const protectedFinanceField = !input.classList.contains('denom-count');
+        input.readOnly = getUserRole() === 'admin' && protectedFinanceField;
+        input.disabled = getUserRole() === 'admin' && protectedFinanceField;
+    });
     startPresence();
+    fetchCashBalance();
     renderLastSettlement();
     renderOwnerPanel();
 }
@@ -1475,6 +1483,63 @@ function initAccess() {
 // --- 3. ГЛАВНЫЙ РАСЧЕТ КАССЫ ---
 function getHistory() { return JSON.parse(localStorage.getItem('shift_history') || '[]'); }
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
+let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
+async function fetchCashBalance() {
+    try {
+        const response = await fetch('/api/cash-balance');
+        if (response.ok) {
+            currentCashBalance = await response.json();
+            localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+            if (isOwnerOrIT()) renderOwnerPanel();
+        }
+    } catch (error) { console.warn('Не удалось загрузить фактическую кассу:', error); }
+}
+async function saveCashBalance() {
+    if (!currentUser || !['admin', 'owner', 'it'].includes(getUserRole())) return;
+    let total = 0;
+    document.querySelectorAll('.denom-count').forEach(input => { total += (parseInt(input.value) || 0) * parseInt(input.dataset.val); });
+    const payload = { amount: total, user: currentUser.name, dateKey: getLocalDateKey() };
+    try {
+        const response = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error('cash');
+        currentCashBalance = await response.json();
+        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+        renderOwnerPanel();
+        showSystemToast('Наличная касса сохранена');
+    } catch (error) { showSystemToast('Не удалось сохранить кассу'); }
+}
+function getDenominationState() {
+    const state = {};
+    document.querySelectorAll('.denom-count').forEach(input => { state[Number(input.dataset.val)] = parseInt(input.value) || 0; });
+    return state;
+}
+function getDenominationTotal(state = getDenominationState()) {
+    return Object.entries(state).reduce((sum, [value, count]) => sum + Number(value) * count, 0);
+}
+function withdrawFromDenominations(state, amount) {
+    const denominations = Object.keys(state).map(Number).sort((a, b) => b - a);
+    const dp = Array.from({ length: amount + 1 }, () => null);
+    dp[0] = {};
+    for (const denomination of denominations) {
+        const count = state[denomination] || 0;
+        for (let copy = 0; copy < count; copy++) {
+            for (let sum = amount; sum >= denomination; sum--) {
+                if (dp[sum] === null && dp[sum - denomination] !== null) {
+                    dp[sum] = { ...dp[sum - denomination], [denomination]: (dp[sum - denomination][denomination] || 0) + 1 };
+                }
+            }
+        }
+    }
+    if (dp[amount] === null) return null;
+    const remaining = { ...state };
+    Object.entries(dp[amount]).forEach(([value, count]) => { remaining[value] -= count; });
+    return remaining;
+}
+function applyDenominationState(state) {
+    document.querySelectorAll('.denom-count').forEach(input => { input.value = state[Number(input.dataset.val)] || 0; });
+    localStorage.setItem('cash_denominations', JSON.stringify(state));
+    calcCashFromQty();
+}
 function getAvailableRevenueDates() {
     const openedDates = JSON.parse(localStorage.getItem('opened_shift_dates') || '[]');
     const historyDates = getHistory().map(item => item.dateKey).filter(Boolean);
@@ -1564,6 +1629,8 @@ function renderOwnerPanel() {
     document.getElementById('owner-month').innerText = total(history.filter(item => now - item.timestamp < 31 * day)).toLocaleString() + ' ₸';
     const expenses = getExpenses();
     document.getElementById('owner-expenses-total').innerText = total(expenses).toLocaleString() + ' ₸';
+    document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
+    document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
     const canEditFinancials = ['owner', 'it'].includes(getUserRole());
     document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="text-slate-500">История пока пуста</td></tr>';
     const adjustment = getRevenueAdjustment(getLocalDateKey());
@@ -1689,15 +1756,22 @@ async function editEmployee(id) {
 }
 function openShiftModal() { document.getElementById('shift-report-modal').classList.remove('hidden'); document.getElementById('shift-report-modal').classList.add('flex'); }
 function closeShiftModal() { document.getElementById('shift-report-modal').classList.add('hidden'); document.getElementById('shift-report-modal').classList.remove('flex'); }
-function confirmShiftReport() {
+async function confirmShiftReport() {
     const source = document.getElementById('shift-source').value;
-    const previousCash = Number(document.getElementById('previous-cash').value) || 0;
+    const denominationState = getDenominationState();
+    const actualCash = getDenominationTotal(denominationState);
     const qr = Object.values(payments).reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const cash = Object.values(payments).reduce((sum, item) => sum + Number(item.cash || 0), 0);
-    const finalCash = previousCash + cash - (source === 'cash' ? 7000 : 0);
-    if (finalCash < 0) return alert('Итоговая наличная касса не может быть отрицательной. Проверьте вчерашнюю кассу.');
-    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, details: Object.values(payments) };
-    localStorage.setItem('last_shift_settlement', JSON.stringify({ cashOnHand: previousCash + cash, source, balance: finalCash, date: report.date, admin: ADMIN_NAME }));
+    let finalCash = actualCash;
+    if (source === 'cash') {
+        const remaining = withdrawFromDenominations(denominationState, 7000);
+        if (!remaining) return alert('В номиналах нет точной суммы 7 000 ₸ для выдачи. Проверьте купюры.');
+        finalCash = actualCash - 7000;
+        applyDenominationState(remaining);
+    }
+    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash: actualCash, source, finalCash, total: qr + cash, details: Object.values(payments) };
+    localStorage.setItem('last_shift_settlement', JSON.stringify({ cashOnHand: actualCash, source, balance: finalCash, date: report.date, admin: ADMIN_NAME }));
+    await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: finalCash, user: ADMIN_NAME, dateKey: getLocalDateKey() }) }).catch(() => {});
     const history = getHistory(); history.push(report); localStorage.setItem('shift_history', JSON.stringify(history));
     localStorage.setItem('last_cash_balance', String(finalCash));
     renderLastSettlement();
