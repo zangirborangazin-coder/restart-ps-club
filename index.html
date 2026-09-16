@@ -1269,8 +1269,12 @@ let remoteEmployees = [
 // Геттер сотрудников
 const employees = () => remoteEmployees;
 
+function getUserRole(user = currentUser) {
+    return String(user?.role || '').trim().toLowerCase();
+}
+
 function isOwnerOrIT() {
-    return Boolean(currentUser && ['owner', 'it'].includes(currentUser.role));
+    return ['owner', 'it'].includes(getUserRole());
 }
 
 // 2. Фоновая загрузка дополнительных сотрудников из базы PostgreSQL
@@ -1318,6 +1322,8 @@ function login(event) {
     }
 
     currentUser = user;
+    currentUser.role = getUserRole(currentUser);
+    if (currentUser.login === 'Madi') currentUser.role = 'owner';
     ADMIN_NAME = user.name;
     sessionStorage.setItem('restart_user', JSON.stringify(user));
     document.getElementById('login-screen').classList.add('hidden');
@@ -1332,6 +1338,9 @@ window.addEventListener('load', () => {
 function logout() { sessionStorage.removeItem('restart_user'); location.reload(); }
 function configureAccess() {
     if (!currentUser) return;
+    currentUser.role = getUserRole(currentUser);
+    if (currentUser.login === 'Madi') currentUser.role = 'owner';
+    sessionStorage.setItem('restart_user', JSON.stringify(currentUser));
     document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
     ['session-user', 'logout-btn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
     if (isOwnerOrIT()) {
@@ -1339,8 +1348,8 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
-    if (currentUser.role === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
-    document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = currentUser.role === 'admin'; input.disabled = currentUser.role === 'admin'; });
+    if (getUserRole() === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
+    document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = getUserRole() === 'admin'; input.disabled = getUserRole() === 'admin'; });
     renderOwnerPanel();
 }
 function initAccess() {
