@@ -7,8 +7,8 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="shortcut icon" href="/favicon.svg" type="image/x-icon">
+     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.svg" type="image/x-icon">
     <style>
         :root { 
             --bg: #000000;
@@ -144,6 +144,54 @@
         input:focus, select:focus {
             border-color: rgba(56, 189, 248, 0.65) !important;
             box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.12);
+        }
+
+        .revenue-calendar {
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 18px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        .revenue-calendar-weekdays,
+        .revenue-calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+        }
+
+        .revenue-calendar-weekdays {
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .revenue-calendar-weekdays div { padding: 7px 4px; }
+
+        .revenue-day {
+            min-height: 52px;
+            padding: 6px 7px;
+            border-right: 1px solid rgba(148, 163, 184, 0.08);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+            color: #cbd5e1;
+            text-align: left;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .revenue-day:nth-child(7n) { border-right: 0; }
+        .revenue-day:hover { background: rgba(56, 189, 248, 0.1); }
+        .revenue-day.empty { background: rgba(0, 0, 0, 0.08); cursor: default; }
+        .revenue-day.selected { background: rgba(56, 189, 248, 0.16); box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.65); }
+        .revenue-day.today .revenue-day-number { color: #38bdf8; }
+        .revenue-day-number { display: block; font-size: 12px; font-weight: 700; }
+        .revenue-day-total { display: block; margin-top: 4px; color: #86efac; font-size: 10px; font-weight: 700; }
+        .revenue-day.has-revenue { background: rgba(34, 197, 94, 0.07); }
+
+        @media (max-width: 640px) {
+            .revenue-day { min-height: 46px; padding: 5px 4px; }
+            .revenue-day-total { margin-top: 3px; font-size: 9px; }
         }
 
         input::placeholder, select option {
@@ -469,10 +517,10 @@
     <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
     <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
     <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
-    <div id="nav-admin-btn" class="nav-link hidden" onclick="showPage('admin-page', this)">Меню админа</div>
     <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
     <div id="online-users" class="nav-link presence-link hidden" title="Пользователи онлайн"></div>
     <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
+    <div id="nav-profile-btn" class="nav-link hidden" onclick="openProfileModal()">Профиль</div>
     <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
 </nav>
 
@@ -506,29 +554,8 @@
 </div>
 
 <div id="cash-page" class="page hidden max-w-7xl mx-auto p-10">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div class="stealth-card p-6">
-            <h3 class="section-label text-blue-400">Счет по номиналам</h3>
-            <div id="denom-rows" class="space-y-1">
-                <script>
-                    const denoms = [20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5];
-                    denoms.forEach(d => {
-                        document.write(`
-                            <div class="flex justify-between items-center py-1 border-b border-white/5">
-                                <span class="font-mono text-sm text-gray-400">${d} ₸</span>
-                                <input type="number" placeholder="0" class="cash-input denom-count" data-val="${d}" oninput="calcCashFromQty()">
-                            </div>
-                        `);
-                    });
-                </script>
-            </div>
-            <div class="mt-6 p-4 bg-white/5 rounded-xl text-center">
-                <div class="text-[10px] text-gray-500 uppercase">Итого наличных</div>
-                <div id="cash-from-qty-total" class="text-xl font-bold font-mono text-white">0 ₸</div>
-            </div>
-        </div>
-
-        <div class="stealth-card p-6 flex flex-col justify-between">
+    <div id="cash-content-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch">
+        <div class="stealth-card p-6 flex flex-col justify-between w-full h-full">
             <div>
                 <h3 class="section-label text-green-400">Итого за смену</h3>
                 <div class="space-y-6 mt-4">
@@ -548,6 +575,20 @@
                 <div class="text-[10px] uppercase font-bold text-blue-500 mb-2">Общая выручка</div>
                 <div id="grand-total" class="text-4xl font-black font-mono text-white">0 ₸</div>
             </div>
+            <button id="cash-report-btn" class="btn-stealth w-full mt-5" type="button" onclick="generateReport()">Сдать отчёт</button>
+        </div>
+        <div id="last-shift-result" class="hidden w-full h-full">
+            <div class="stealth-card p-6 border border-cyan-400/20 h-full">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <h3 class="section-label text-cyan-300 mb-0">Последняя сдача смены</h3>
+                <button id="clear-cash-btn" class="btn-secondary text-xs text-red-300 hidden" type="button" onclick="clearCurrentCash()">Очистить кассу</button>
+            </div>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-3"><span class="text-sm text-slate-400">Касса до сдачи</span><strong id="settlement-cash" class="text-lg font-black">0 ₸</strong></div>
+                <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-3"><span class="text-sm text-slate-400">Взял</span><strong id="settlement-taken" class="text-lg font-black">7 000 ₸</strong></div>
+                <div class="flex items-center justify-between gap-4"><span class="text-sm text-slate-400">Остаток после сдачи</span><strong id="settlement-balance" class="text-lg font-black text-green-300">0 ₸</strong></div>
+            </div>
+        </div>
         </div>
     </div>
 </div>
@@ -600,38 +641,52 @@
         <div class="owner-stat"><div class="text-xs text-slate-400">Сегодня</div><div id="owner-today" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Неделя</div><div id="owner-week" class="text-2xl font-black mt-2">0 ₸</div></div>
         <div class="owner-stat"><div class="text-xs text-slate-400">Месяц</div><div id="owner-month" class="text-2xl font-black mt-2">0 ₸</div></div>
-        <div class="owner-stat"><div class="text-xs text-slate-400">Расходы</div><div id="owner-expenses-total" class="text-2xl font-black mt-2">0 ₸</div></div>
+        <div class="owner-stat"><div class="text-xs text-slate-400">Фактическая наличная касса</div><div id="owner-cash-balance" class="text-2xl font-black mt-2">0 ₸</div><div id="owner-cash-updated" class="text-[10px] text-slate-500 mt-1"></div></div>
     </div>
     <div class="stealth-card p-6 mb-8">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div><h2 class="font-bold text-lg">Календарь выручки</h2><p class="text-xs text-slate-400 mt-2">Дни появляются после открытия смены администратором.</p></div>
-            <input id="revenue-date" type="date" min="2026-01-01" max="2028-01-01" onchange="renderSelectedRevenue()" class="w-full md:w-auto">
+            <div><h2 class="font-bold text-lg">Календарь выручки</h2><p class="text-xs text-slate-400 mt-2">Выберите любую дату, чтобы посмотреть выручку.</p></div>
+            <input id="revenue-date" type="hidden">
         </div>
-        <div id="opened-dates" class="flex flex-wrap gap-2 mt-5"></div>
+        <div class="flex items-center justify-between gap-3 mt-5 mb-3">
+            <button class="btn-secondary px-4 py-2" type="button" aria-label="Предыдущий месяц" onclick="changeRevenueMonth(-1)">←</button>
+            <strong id="revenue-calendar-title" class="text-base"></strong>
+            <button class="btn-secondary px-4 py-2" type="button" aria-label="Следующий месяц" onclick="changeRevenueMonth(1)">→</button>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 mb-3">
+            <button class="btn-secondary text-xs" type="button" onclick="clearRevenue('day')">Очистить выбранный день</button>
+            <button class="btn-secondary text-xs text-red-300" type="button" onclick="clearRevenue('month')">Очистить месяц</button>
+        </div>
+        <div class="revenue-calendar">
+            <div class="revenue-calendar-weekdays"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div></div>
+            <div id="revenue-calendar-grid" class="revenue-calendar-grid"></div>
+        </div>
         <div id="selected-revenue" class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5"></div>
         <div id="revenue-edit-box" class="hidden mt-5 border-t border-white/10 pt-5">
             <div class="text-xs text-slate-400 mb-3">Корректировка выручки владельцем за выбранную дату</div>
             <div class="flex flex-col md:flex-row gap-2"><input id="revenue-edit-qr" type="number" min="0" placeholder="QR, ₸"><input id="revenue-edit-cash" type="number" min="0" placeholder="Наличные, ₸"><button class="btn-stealth" onclick="saveRevenueAdjustment()">Сохранить выручку</button></div>
         </div>
     </div>
+    <div class="stealth-card p-6 mb-8">
+        <div class="flex items-center justify-between gap-3 mb-5">
+            <h2 class="font-bold text-lg">Выдача администраторам</h2>
+            <span class="text-xs text-slate-400">7 000 ₸ за смену</span>
+        </div>
+        <div id="cash-withdrawals-body" class="space-y-2"></div>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div class="stealth-card p-6">
             <h2 class="font-bold text-lg mb-5">История смен</h2>
-            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Касса</th></tr></thead><tbody id="history-body"></tbody></table></div>
+            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Расход</th><th>Касса</th><th></th></tr></thead><tbody id="history-body"></tbody></table></div>
         </div>
         <div class="stealth-card p-6">
             <div class="flex items-center justify-between gap-3 mb-5"><h2 class="font-bold text-lg">Оплаты клиентов сегодня</h2><button class="text-xs text-red-400 font-bold" onclick="clearTodayPayments()">Очистить</button></div>
-            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Время</th><th>Зона</th><th>QR</th><th>Наличные</th><th>Итого</th></tr></thead><tbody id="payments-today-body"></tbody></table></div>
+            <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Время</th><th>Зона</th><th>QR</th><th>Наличные</th><th>Итого</th><th></th></tr></thead><tbody id="payments-today-body"></tbody></table></div>
             <div id="payments-today-total" class="text-right font-bold mt-4">Сегодня: 0 ₸</div>
-        </div>
-        <div class="stealth-card p-6">
-            <h2 class="font-bold text-lg mb-5">Расходы</h2>
-            <div class="flex gap-2 mb-5"><input id="expense-title" class="flex-1" placeholder="Описание"><input id="expense-amount" type="number" class="w-32" placeholder="Сумма"><button class="btn-secondary" onclick="addExpense()">Добавить</button></div>
-            <div id="expenses-body" class="space-y-2"></div>
         </div>
         <div class="stealth-card p-6 lg:col-span-2">
             <div class="flex justify-between items-center mb-5"><h2 class="font-bold text-lg">Управление сотрудниками</h2><span class="text-xs text-slate-400">Владелец и IT</span></div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5"><input id="employee-name" placeholder="Имя"><input id="employee-login" placeholder="Логин"><input id="employee-password" placeholder="Пароль"><select id="employee-role"><option value="admin">Администратор</option><option value="owner">Владелец</option><option value="it">IT</option></select></div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-5"><input id="employee-name" placeholder="Имя"><input id="employee-login" placeholder="Логин"><input id="employee-password" placeholder="Пароль"><select id="employee-role" aria-label="Роль сотрудника"><option value="admin">Администратор</option></select></div>
             <button class="btn-stealth mb-5" onclick="saveEmployee()">Добавить сотрудника</button>
             <div class="overflow-auto"><table class="owner-table"><thead id="employees-head"></thead><tbody id="employees-body"></tbody></table></div>
         </div>
@@ -654,12 +709,32 @@
         <label class="text-xs text-slate-400 uppercase">Как были взяты деньги?</label>
         <select id="shift-source" class="w-full mt-2 mb-4"><option value="cash">Наличными с кассы</option><option value="kaspi">Через банк KASPI.kz</option></select>
         <input id="previous-cash" type="number" class="w-full mb-2" placeholder="Вчерашняя наличная касса, ₸" value="0">
-        <p class="text-xs text-slate-400 mb-5">Итоговая наличная касса: вчерашняя наличка + сегодняшняя наличка - 7 000 ₸ (при выборе наличных).</p>
+        <input id="shift-expense-title" type="text" class="w-full mb-2" placeholder="Описание расхода (необязательно)">
+        <input id="shift-expense-amount" type="number" min="0" class="w-full mb-2" placeholder="Сумма расхода, ₸ (необязательно)">
+        <p class="text-xs text-slate-400 mb-5">Итоговая касса: остаток прошлого дня + сегодняшняя наличная выручка. При выдаче наличными вычитается 7 000 ₸, при Kaspi остаток не уменьшается.</p>
         <div class="flex gap-2"><button class="btn-secondary flex-1" onclick="closeShiftModal()">Отмена</button><button class="btn-stealth flex-1" onclick="confirmShiftReport()">Подтвердить</button></div>
     </div>
 </div>
 
+<div id="admin-profile-modal" class="hidden fixed inset-0 z-[3000] items-center justify-center bg-black/80 p-5">
+    <div class="stealth-card w-full max-w-md p-7">
+        <h2 class="text-xl font-bold mb-2">Профиль администратора</h2>
+        <p class="text-sm text-slate-400 mb-5">Изменение логина и пароля</p>
+        <div class="space-y-3">
+            <input id="admin-profile-login" class="w-full" autocomplete="username" placeholder="Логин">
+            <input id="admin-profile-password" class="w-full" type="password" autocomplete="new-password" placeholder="Новый пароль">
+        </div>
+        <div class="flex gap-2 mt-5"><button class="btn-secondary flex-1" type="button" onclick="closeProfileModal()">Отмена</button><button class="btn-stealth flex-1" type="button" onclick="saveAdminProfile()">Сохранить</button></div>
+    </div>
+</div>
+
 <script>
+const apiOrigin = ['5500', '5501'].includes(window.location.port) ? 'http://localhost:3000' : '';
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (resource, options) => {
+    if (typeof resource === 'string' && resource.startsWith('/api/')) resource = `${apiOrigin}${resource}`;
+    return nativeFetch(resource, options);
+};
 // --- 1. СИСТЕМА МОНИТОРИНГА (LOGGING) ---
 function trackAction(message) {
     const log = JSON.parse(localStorage.getItem('boss_logs') || "[]");
@@ -802,6 +877,15 @@ function trackAction(message) {
     function renderActiveState(key, type, id, startTime, endTime, isOpen) {
         const statusEl = document.getElementById(`st-${key}`);
         if(!statusEl) return;
+        const startInput = document.getElementById(`ts-${key}`);
+        const endInput = document.getElementById(`te-${key}`);
+        const formatMinutes = value => {
+            if (value === null || value === undefined || !Number.isFinite(Number(value))) return '';
+            const minutes = ((Number(value) % 1440) + 1440) % 1440;
+            return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+        };
+        if (startInput) startInput.value = formatMinutes(startTime);
+        if (endInput && endTime !== null && endTime !== undefined) endInput.value = formatMinutes(endTime);
         statusEl.innerHTML = `<span class="status-dot dot-active"></span>В РАБОТЕ`;
         statusEl.className = "text-[10px] font-bold text-white uppercase tracking-wider";
         
@@ -1060,7 +1144,8 @@ function trackAction(message) {
             const count = parseInt(input.value) || 0;
             total += count * parseInt(input.getAttribute('data-val'));
         });
-        document.getElementById('cash-from-qty-total').innerText = total.toLocaleString() + ' ₸';
+        const totalElement = document.getElementById('cash-from-qty-total');
+        if (totalElement) totalElement.innerText = total.toLocaleString() + ' ₸';
     }
 
     function calcQtyFromSum() {
@@ -1104,7 +1189,7 @@ function trackAction(message) {
 
     function showPage(id, btn) {
         if (id === 'owner-page' && !isOwnerOrIT()) { showSystemToast('Доступ только владельцу или IT'); return; }
-        if (id === 'cash-page' && !isOwnerOrIT()) { showSystemToast('Касса доступна только владельцу или IT'); return; }
+        if (id === 'cash-page' && !isOwnerOrIT() && getUserRole() !== 'admin') { showSystemToast('Касса доступна только сотрудникам смены'); return; }
         if (id === 'admin-page' && (!currentUser || currentUser.role !== 'admin')) { showSystemToast('Меню доступно только администратору'); return; }
         document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
@@ -1298,20 +1383,15 @@ function trackAction(message) {
 <script>
 // --- 1. ДОСТУП И РОЛИ ---
 let payments = JSON.parse(localStorage.getItem('saved_payments')) || {};
-const defaultEmployees = [
-    { name: 'Мади', login: 'Madi', password: 'Asd1230123', role: 'owner', fixed: true },
-    { name: 'Еламан', login: 'Elaman', password: 'Asd1230123', role: 'owner', fixed: true },
-    { name: 'Нурбол', login: 'Nurbol', password: 'Asd1230123', role: 'owner', fixed: true },
-    { name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true }
-];
-// Значения по умолчанию доступны сразу при загрузке страницы
-// 1. Дефолтные аккаунты доступны СРАЗУ (вход сработает мгновенно)
-let remoteEmployees = [
+const systemAccessFallback = [
     { id: 1, name: 'Мади', login: 'Madi', password: 'Asd1230123', role: 'owner', fixed: true },
     { id: 2, name: 'Еламан', login: 'Elaman', password: 'Asd1230123', role: 'owner', fixed: true },
     { id: 3, name: 'Нурбол', login: 'Nurbol', password: 'Asd1230123', role: 'owner', fixed: true },
-    { id: 4, name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true }
+    { id: 4, name: 'IT', login: 'brngzn03', password: 'Cocolimbo03', role: 'it', fixed: true },
+    { id: 5, name: 'Администратор', login: 'admin', password: 'admin', role: 'admin', fixed: true },
+    { id: 6, name: 'Администратор 2', login: 'admin1', password: 'Aa1234', role: 'admin', fixed: true }
 ];
+let remoteEmployees = [...systemAccessFallback];
 
 // Геттер сотрудников
 const employees = () => remoteEmployees;
@@ -1350,7 +1430,7 @@ async function fetchEmployees() {
             return true;
     }
   } catch (e) {
-    console.warn("Фоновая загрузка из БД пока недоступна, используются дефолтные аккаунты", e);
+        console.warn("База данных сотрудников недоступна", e);
   }
     return false;
 }
@@ -1358,7 +1438,7 @@ async function fetchEmployees() {
 // 3. Надежная функция входа
 async function login(event) {
     event.preventDefault();
-    await fetchEmployees();
+    const employeesLoaded = await fetchEmployees();
     const loginValue = document.getElementById('login-user').value.trim();
     const passwordValue = document.getElementById('login-password').value;
     const error = document.getElementById('login-error');
@@ -1366,8 +1446,13 @@ async function login(event) {
     const userList = employees();
     const user = userList.find(item => item.login === loginValue && item.password === passwordValue);
 
-    if (!user) { 
-        error.innerText = 'Неверный логин или пароль.'; 
+    if (!employeesLoaded && !user) {
+        error.innerText = 'База данных сотрудников недоступна.';
+        error.classList.remove('hidden');
+        return;
+    }
+    if (!user) {
+        error.innerText = 'Неверный логин или пароль.';
         error.classList.remove('hidden'); 
         return; 
     }
@@ -1455,9 +1540,26 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
-    if (getUserRole() === 'admin') document.getElementById('nav-admin-btn').classList.remove('hidden');
-    document.querySelectorAll('#cash-page input').forEach(input => { input.readOnly = getUserRole() === 'admin'; input.disabled = getUserRole() === 'admin'; });
+    if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
+    const reportButton = document.getElementById('cash-report-btn');
+    if (reportButton) reportButton.classList.toggle('hidden', getUserRole() !== 'admin');
+    const profileButton = document.getElementById('nav-profile-btn');
+    if (profileButton) profileButton.classList.toggle('hidden', getUserRole() !== 'admin');
+    const profileCard = document.getElementById('admin-profile-card');
+    if (profileCard) {
+        profileCard.classList.toggle('hidden', getUserRole() !== 'admin');
+        if (getUserRole() === 'admin') {
+            document.getElementById('admin-profile-login').value = currentUser.login || '';
+        }
+    }
+    document.querySelectorAll('#cash-page input').forEach(input => {
+        const protectedFinanceField = !input.classList.contains('denom-count');
+        input.readOnly = getUserRole() === 'admin' && protectedFinanceField;
+        input.disabled = getUserRole() === 'admin' && protectedFinanceField;
+    });
     startPresence();
+    fetchCashBalance();
+    renderLastSettlement();
     renderOwnerPanel();
 }
 function initAccess() {
@@ -1468,10 +1570,82 @@ function initAccess() {
 // --- 3. ГЛАВНЫЙ РАСЧЕТ КАССЫ ---
 function getHistory() { return JSON.parse(localStorage.getItem('shift_history') || '[]'); }
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
+let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
+async function fetchCashBalance() {
+    try {
+        const response = await fetch('/api/cash-balance');
+        if (response.ok) {
+            currentCashBalance = await response.json();
+            localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+            if (currentCashBalance.denominations) applyDenominationState(currentCashBalance.denominations);
+            if (isOwnerOrIT()) renderOwnerPanel();
+        }
+    } catch (error) { console.warn('Не удалось загрузить фактическую кассу:', error); }
+}
+async function saveCashBalance() {
+    if (!currentUser || !['admin', 'owner', 'it'].includes(getUserRole())) return;
+    let total = 0;
+    document.querySelectorAll('.denom-count').forEach(input => { total += (parseInt(input.value) || 0) * parseInt(input.dataset.val); });
+    const denominations = getDenominationState();
+    const payload = { amount: total, denominations, user: currentUser.name, dateKey: getLocalDateKey() };
+    try {
+        const response = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error('cash');
+        currentCashBalance = await response.json();
+        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+        renderOwnerPanel();
+        showSystemToast('Наличная касса сохранена');
+    } catch (error) { showSystemToast('Не удалось сохранить кассу'); }
+}
+function getDenominationState() {
+    const state = {};
+    document.querySelectorAll('.denom-count').forEach(input => { state[Number(input.dataset.val)] = parseInt(input.value) || 0; });
+    return state;
+}
+function getDenominationTotal(state = getDenominationState()) {
+    return Object.entries(state).reduce((sum, [value, count]) => sum + Number(value) * count, 0);
+}
+function withdrawFromDenominations(state, amount) {
+    const denominations = Object.keys(state).map(Number).sort((a, b) => b - a);
+    const dp = Array.from({ length: amount + 1 }, () => null);
+    dp[0] = {};
+    for (const denomination of denominations) {
+        const count = state[denomination] || 0;
+        for (let copy = 0; copy < count; copy++) {
+            for (let sum = amount; sum >= denomination; sum--) {
+                if (dp[sum] === null && dp[sum - denomination] !== null) {
+                    dp[sum] = { ...dp[sum - denomination], [denomination]: (dp[sum - denomination][denomination] || 0) + 1 };
+                }
+            }
+        }
+    }
+    if (dp[amount] === null) return null;
+    const remaining = { ...state };
+    Object.entries(dp[amount]).forEach(([value, count]) => { remaining[value] -= count; });
+    return remaining;
+}
+function applyDenominationState(state) {
+    document.querySelectorAll('.denom-count').forEach(input => { input.value = state[Number(input.dataset.val)] || 0; });
+    localStorage.setItem('cash_denominations', JSON.stringify(state));
+    calcCashFromQty();
+}
 function getAvailableRevenueDates() {
     const openedDates = JSON.parse(localStorage.getItem('opened_shift_dates') || '[]');
-    const historyDates = getHistory().map(item => item.dateKey).filter(Boolean);
-    return [...new Set(openedDates.concat(historyDates))].filter(date => date >= '2026-01-01' && date <= '2028-01-01').sort();
+    const historyDates = getHistory().map(getRevenueDateKey).filter(Boolean);
+    const paymentDates = Object.values(payments).map(getRevenueDateKey).filter(Boolean);
+    return [...new Set(openedDates.concat(historyDates, paymentDates))].filter(date => date >= '2026-01-01' && date <= '2028-01-01').sort();
+}
+function getRevenueDateKey(item) {
+    if (!item) return '';
+    const directDate = item.dateKey || item.date_key;
+    if (directDate) {
+        const value = String(directDate);
+        if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+        const match = value.match(/^(\d{2})[./-](\d{2})[./-](\d{4})$/);
+        if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+    }
+    if (item.timestamp) return getLocalDateKey(new Date(Number(item.timestamp)));
+    return '';
 }
 function getRevenueAdjustment(dateKey) {
     const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
@@ -1488,26 +1662,58 @@ function getRevenueTotals(dateKey) {
 }
 function getRevenueForDate(dateKey) {
     const history = getHistory();
-    const archived = history.filter(item => item.dateKey === dateKey).flatMap(item => item.details || []);
-    const fallback = history.filter(item => item.dateKey === dateKey && !(item.details || []).length).map(item => ({
+    const matchingHistory = history.filter(item => getRevenueDateKey(item) === dateKey);
+    const archived = matchingHistory.flatMap(item => item.details || []);
+    const fallback = matchingHistory.filter(item => !(item.details || []).length).map(item => ({
         time: '-', zone: 'Смена', qr: item.qr, cash: item.cash, total: Number(item.qr || 0) + Number(item.cash || 0)
     }));
-    const current = Object.values(payments).filter(item => (item.dateKey || getLocalDateKey(new Date(item.timestamp || 0))) === dateKey);
+    const current = Object.values(payments).filter(item => getRevenueDateKey(item) === dateKey);
     return archived.concat(fallback, current);
+}
+function renderLastSettlement() {
+    const result = JSON.parse(localStorage.getItem('last_shift_settlement') || 'null');
+    const box = document.getElementById('last-shift-result');
+    if (!box || !result || !currentUser) return;
+    document.getElementById('settlement-cash').innerText = `${Number(result.cashOnHand || 0).toLocaleString()} ₸`;
+    document.getElementById('settlement-taken').innerText = `7 000 ₸ (${result.source === 'cash' ? 'наличные' : 'Kaspi'})`;
+    document.getElementById('settlement-balance').innerText = `${Number(result.balance || 0).toLocaleString()} ₸`;
+    document.getElementById('clear-cash-btn')?.classList.toggle('hidden', !isOwnerOrIT());
+    box.classList.remove('hidden');
+}
+async function clearCurrentCash() {
+    if (!isOwnerOrIT()) return showSystemToast('Очистить кассу может только владелец или IT');
+    if (!confirm('Обнулить текущий остаток кассы? История смен не изменится.')) return;
+    try {
+        const response = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: 0, user: currentUser.name, dateKey: getLocalDateKey() }) });
+        if (!response.ok) throw new Error('cash');
+        currentCashBalance = await response.json();
+        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+        localStorage.setItem('last_cash_balance', '0');
+        localStorage.removeItem('last_shift_settlement');
+        document.getElementById('last-shift-result').classList.add('hidden');
+        renderOwnerPanel();
+        showSystemToast('Текущая касса очищена');
+    } catch (error) {
+        currentCashBalance = { amount: 0, denominations: {}, user: currentUser.name, dateKey: getLocalDateKey(), updatedAt: new Date().toLocaleTimeString('ru-RU') };
+        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+        localStorage.setItem('last_cash_balance', '0');
+        localStorage.removeItem('last_shift_settlement');
+        document.getElementById('last-shift-result')?.classList.add('hidden');
+        renderOwnerPanel();
+        showSystemToast('Касса очищена локально до восстановления связи');
+    }
 }
 function renderSelectedRevenue() {
     const dateInput = document.getElementById('revenue-date');
     const selectedDate = dateInput.value;
-    const available = getAvailableRevenueDates();
+    if (!selectedDate) return;
+    localStorage.setItem('selected_revenue_date', selectedDate);
     const result = document.getElementById('selected-revenue');
-    if (!available.includes(selectedDate)) {
-        result.innerHTML = '<div class="text-sm text-slate-400 md:col-span-3">В этот день смена ещё не открывалась.</div>';
-        return;
-    }
     const totals = getRevenueTotals(selectedDate);
     const qr = totals.qr;
     const cash = totals.cash;
-    result.innerHTML = `<div class="owner-stat"><div class="text-xs text-slate-400">QR</div><div class="text-xl font-black mt-2">${qr.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Наличные</div><div class="text-xl font-black mt-2">${cash.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Выручка за ${selectedDate.split('-').reverse().join('.')}</div><div class="text-xl font-black mt-2">${(qr + cash).toLocaleString()} ₸</div></div>`;
+    const editButton = (type) => currentUser?.role === 'owner' ? `<button type="button" class="text-slate-400 hover:text-blue-400 ml-2" title="Изменить" onclick="editRevenueValue('${type}')">✎</button>` : '';
+    result.innerHTML = `<div class="owner-stat"><div class="text-xs text-slate-400">QR ${editButton('qr')}</div><div class="text-xl font-black mt-2">${qr.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Наличные ${editButton('cash')}</div><div class="text-xl font-black mt-2">${cash.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Выручка за ${selectedDate.split('-').reverse().join('.')}</div><div class="text-xl font-black mt-2">${(qr + cash).toLocaleString()} ₸</div></div>`;
     const editBox = document.getElementById('revenue-edit-box');
     editBox.classList.toggle('hidden', !currentUser || currentUser.role !== 'owner');
     if (currentUser?.role === 'owner') {
@@ -1515,10 +1721,22 @@ function renderSelectedRevenue() {
         document.getElementById('revenue-edit-cash').value = cash;
     }
 }
+function editRevenueValue(type) {
+    if (!currentUser || currentUser.role !== 'owner') return showSystemToast('Изменять выручку может только владелец');
+    const dateKey = document.getElementById('revenue-date').value;
+    const totals = getRevenueTotals(dateKey);
+    const label = type === 'qr' ? 'QR, ₸' : 'Наличные, ₸';
+    const value = Number(prompt(`${label} за ${dateKey.split('-').reverse().join('.')}:`, totals[type]));
+    if (!Number.isFinite(value) || value < 0) return;
+    const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
+    adjustments[dateKey] = { qr: type === 'qr' ? value : totals.qr, cash: type === 'cash' ? value : totals.cash, changedBy: currentUser.name, changedAt: new Date().toISOString() };
+    localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+    renderOwnerPanel();
+    showSystemToast('Выручка изменена');
+}
 function saveRevenueAdjustment() {
     if (!currentUser || currentUser.role !== 'owner') return showSystemToast('Изменять выручку может только владелец');
     const dateKey = document.getElementById('revenue-date').value;
-    if (!getAvailableRevenueDates().includes(dateKey)) return alert('Сначала должна быть открыта смена за эту дату.');
     const qr = Number(document.getElementById('revenue-edit-qr').value);
     const cash = Number(document.getElementById('revenue-edit-cash').value);
     if (!Number.isFinite(qr) || !Number.isFinite(cash) || qr < 0 || cash < 0) return alert('Введите корректные суммы.');
@@ -1528,12 +1746,81 @@ function saveRevenueAdjustment() {
     renderOwnerPanel();
     showSystemToast('Выручка сохранена');
 }
+let revenueCalendarMonth = null;
+function formatRevenueMonth(monthKey) {
+    const [year, month] = monthKey.split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+function changeRevenueMonth(offset) {
+    const [year, month] = revenueCalendarMonth.split('-').map(Number);
+    const nextMonth = new Date(year, month - 1 + offset, 1);
+    revenueCalendarMonth = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+    renderRevenueCalendar();
+}
+function selectRevenueDate(dateKey) {
+    document.getElementById('revenue-date').value = dateKey;
+    localStorage.setItem('selected_revenue_date', dateKey);
+    renderRevenueCalendar();
+}
+function getRevenueMonthDates(monthKey) {
+    const [year, month] = monthKey.split('-').map(Number);
+    const dates = [];
+    for (let day = 1; day <= new Date(year, month, 0).getDate(); day++) {
+        dates.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    }
+    return dates;
+}
+async function clearRevenue(scope) {
+    if (!isOwnerOrIT()) return showSystemToast('Очищать выручку может только владелец или IT');
+    const selectedDate = document.getElementById('revenue-date').value;
+    const dates = scope === 'day' ? [selectedDate] : getRevenueMonthDates(revenueCalendarMonth);
+    const label = scope === 'day' ? selectedDate.split('-').reverse().join('.') : formatRevenueMonth(revenueCalendarMonth);
+    if (!confirm(`Очистить выручку за ${scope === 'day' ? `день ${label}` : `весь месяц: ${label}`}?`)) return;
+    const dateSet = new Set(dates);
+    const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
+    dates.forEach(dateKey => delete adjustments[dateKey]);
+    localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+    const history = getHistory().filter(item => !dateSet.has(getRevenueDateKey(item)));
+    localStorage.setItem('shift_history', JSON.stringify(history));
+    const openedDates = JSON.parse(localStorage.getItem('opened_shift_dates') || '[]');
+    localStorage.setItem('opened_shift_dates', JSON.stringify(openedDates.filter(dateKey => !dateSet.has(dateKey))));
+    Object.keys(payments).forEach(id => {
+        if (dateSet.has(getRevenueDateKey(payments[id]))) delete payments[id];
+    });
+    localStorage.setItem('saved_payments', JSON.stringify(payments));
+    await Promise.all(dates.flatMap(dateKey => [
+        fetch(`/api/payments/date/${dateKey}`, { method: 'DELETE' }).catch(() => null),
+        fetch(`/api/shift-reports/date/${dateKey}`, { method: 'DELETE' }).catch(() => null)
+    ]));
+    syncPaymentsToFinance();
+    renderOwnerPanel();
+    showSystemToast('Выручка очищена');
+}
 function renderRevenueCalendar() {
-    const dates = getAvailableRevenueDates();
     const input = document.getElementById('revenue-date');
     const today = getLocalDateKey();
-    input.value = dates.includes(today) ? today : (dates[dates.length - 1] || today);
-    document.getElementById('opened-dates').innerHTML = dates.map(date => `<button class="btn-secondary text-xs" onclick="document.getElementById('revenue-date').value='${date}'; renderSelectedRevenue()">${date.split('-').reverse().join('.')}</button>`).join('') || '<span class="text-sm text-slate-500">Открытых смен пока нет</span>';
+    const savedDate = localStorage.getItem('selected_revenue_date');
+    const dateIsValid = savedDate && savedDate >= '2026-01-01' && savedDate <= '2028-01-01';
+    input.value = dateIsValid ? savedDate : today;
+    revenueCalendarMonth = revenueCalendarMonth || input.value.slice(0, 7);
+    const [year, month] = revenueCalendarMonth.split('-').map(Number);
+    const firstDay = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const grid = document.getElementById('revenue-calendar-grid');
+    const cells = [];
+    for (let index = 0; index < firstDay; index++) cells.push('<div class="revenue-day empty" aria-hidden="true"></div>');
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const totals = getRevenueTotals(dateKey);
+        const total = totals.qr + totals.cash;
+        const classes = ['revenue-day'];
+        if (dateKey === input.value) classes.push('selected');
+        if (dateKey === today) classes.push('today');
+        if (total > 0) classes.push('has-revenue');
+        cells.push(`<button type="button" class="${classes.join(' ')}" onclick="selectRevenueDate('${dateKey}')"><span class="revenue-day-number">${day}</span>${total > 0 ? `<span class="revenue-day-total">${total.toLocaleString()} ₸</span>` : ''}</button>`);
+    }
+    grid.innerHTML = cells.join('');
+    document.getElementById('revenue-calendar-title').innerText = formatRevenueMonth(revenueCalendarMonth);
     renderSelectedRevenue();
 }
 function renderOwnerPanel() {
@@ -1549,20 +1836,28 @@ function renderOwnerPanel() {
     document.getElementById('owner-week').innerText = total(history.filter(item => now - item.timestamp < 7 * day)).toLocaleString() + ' ₸';
     document.getElementById('owner-month').innerText = total(history.filter(item => now - item.timestamp < 31 * day)).toLocaleString() + ' ₸';
     const expenses = getExpenses();
-    document.getElementById('owner-expenses-total').innerText = total(expenses).toLocaleString() + ' ₸';
-    document.getElementById('history-body').innerHTML = history.slice().reverse().map(item => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${item.qr.toLocaleString()} ₸</td><td>${item.cash.toLocaleString()} ₸</td><td>${item.finalCash.toLocaleString()} ₸</td></tr>`).join('') || '<tr><td colspan="5" class="text-slate-500">История пока пуста</td></tr>';
+    document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
+    document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
+    const canEditFinancials = ['owner', 'it'].includes(getUserRole());
+    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const baseCash = today.reduce((sum, item) => sum + Number(item.cash || 0), 0);
     const todayRows = adjustment ? today.concat([{ time: '-', zone: 'Корректировка владельца', qr: adjustment.qr - baseQr, cash: adjustment.cash - baseCash, total: adjustment.qr + adjustment.cash - baseQr - baseCash }]) : today;
-    document.getElementById('payments-today-body').innerHTML = todayRows.slice().reverse().map(item => `<tr><td>${item.time || '-'}</td><td>${item.zone}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.total || 0).toLocaleString()} ₸</td></tr>`).join('') || '<tr><td colspan="5" class="text-slate-500">Оплат сегодня пока нет</td></tr>';
+    document.getElementById('payments-today-body').innerHTML = todayRows.slice().reverse().map(item => `<tr><td>${item.time || '-'}</td><td>${item.zone}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.total || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.id ? `<button class="text-blue-400" title="Изменить" onclick="editPayment(${item.id})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="text-slate-500">Оплат сегодня пока нет</td></tr>';
     document.getElementById('payments-today-total').innerText = `Сегодня: ${(todayTotals.qr + todayTotals.cash).toLocaleString()} ₸`;
-    document.getElementById('expenses-body').innerHTML = expenses.slice().reverse().map(item => `<div class="flex justify-between border-b border-white/5 py-2 text-sm"><span>${item.title}</span><strong>${item.total.toLocaleString()} ₸</strong></div>`).join('') || '<div class="text-sm text-slate-500">Расходов пока нет</div>';
-    const canViewCredentials = currentUser.role === 'owner';
+    const withdrawals = history.filter(item => item.source === 'cash' || item.source === 'kaspi');
+    document.getElementById('cash-withdrawals-body').innerHTML = withdrawals.slice().reverse().map(item => {
+        const date = item.date || (getRevenueDateKey(item) || '').split('-').reverse().join('.');
+        const method = item.source === 'cash' ? 'Наличными' : 'Kaspi банк';
+        return `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/10 pb-3 text-sm"><div><strong>${escapeHtml(date)}</strong><span class="text-slate-400 ml-2">${escapeHtml(item.admin || 'Администратор')}</span></div><strong class="text-cyan-300">7 000 ₸ · ${method}</strong></div>`;
+    }).join('') || '<div class="text-sm text-slate-500">Выдач пока нет</div>';
+    const canViewCredentials = ['owner', 'it'].includes(getUserRole());
     const visibleEmployees = currentUser.role === 'owner' ? employees().filter(item => item.role !== 'it') : employees();
     document.getElementById('employees-head').innerHTML = canViewCredentials ? '<tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Действие</th></tr>' : '<tr><th>Имя</th><th>Роль</th><th>Действие</th></tr>';
     document.getElementById('employees-body').innerHTML = visibleEmployees.map(item => `<tr><td>${item.name}</td>${canViewCredentials ? `<td>${item.login}</td><td>${item.password}</td>` : ''}<td>${item.role}</td><td><button class="text-blue-400 mr-3" onclick="editEmployee(${item.id})">Изменить</button>${item.fixed ? '<span class="text-slate-500">Системный</span>' : `<button class="text-red-400" onclick="removeEmployee(${item.id})">Удалить</button>`}</td></tr>`).join('');
     renderRevenueCalendar();
+    renderLastSettlement();
 }
 async function clearTodayPayments() {
     if (!isOwnerOrIT()) return showSystemToast('Очистить оплаты может только владелец или IT');
@@ -1575,6 +1870,11 @@ async function clearTodayPayments() {
             const payment = payments[id];
             if ((payment.dateKey || getLocalDateKey(new Date(payment.timestamp || 0))) === today) delete payments[id];
         });
+        const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
+        delete adjustments[today];
+        localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+        localStorage.setItem('shift_history', JSON.stringify(getHistory().filter(item => getRevenueDateKey(item) !== today)));
+        await fetch(`/api/shift-reports/date/${today}`, { method: 'DELETE' }).catch(() => null);
         localStorage.setItem('saved_payments', JSON.stringify(payments));
         syncPaymentsToFinance();
         renderOwnerPanel();
@@ -1593,12 +1893,44 @@ function addExpense() {
     document.getElementById('expense-title').value = ''; document.getElementById('expense-amount').value = '';
     renderOwnerPanel();
 }
+async function editPayment(id) {
+    if (!['owner', 'it'].includes(getUserRole())) return;
+    const payment = payments[id];
+    if (!payment) return;
+    const qr = Number(prompt('QR, ₸:', payment.qr));
+    const cash = Number(prompt('Наличные, ₸:', payment.cash));
+    if (!Number.isFinite(qr) || !Number.isFinite(cash) || qr < 0 || cash < 0) return alert('Введите корректные суммы.');
+    const updated = { ...payment, qr, cash, total: qr + cash };
+    try {
+        const response = await fetch(`/api/payments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qr, cash, total: updated.total }) });
+        if (!response.ok) throw new Error('payment');
+        payments[id] = updated;
+        localStorage.setItem('saved_payments', JSON.stringify(payments));
+        syncPaymentsToFinance();
+        renderOwnerPanel();
+        showSystemToast('Оплата изменена');
+    } catch (error) { showSystemToast('Не удалось изменить оплату'); }
+}
+function editShiftHistory(index) {
+    if (!['owner', 'it'].includes(getUserRole())) return;
+    const history = getHistory();
+    const item = history[index];
+    if (!item) return;
+    const qr = Number(prompt('QR за смену, ₸:', item.qr));
+    const cash = Number(prompt('Наличные за смену, ₸:', item.cash));
+    const finalCash = Number(prompt('Касса после сдачи, ₸:', item.finalCash));
+    if (![qr, cash, finalCash].every(value => Number.isFinite(value) && value >= 0)) return alert('Введите корректные суммы.');
+    history[index] = { ...item, qr, cash, finalCash, total: qr + cash };
+    localStorage.setItem('shift_history', JSON.stringify(history));
+    renderOwnerPanel();
+    showSystemToast('История смены изменена');
+}
 async function saveEmployee() {
     if (!isOwnerOrIT()) return;
     const name = document.getElementById('employee-name').value.trim();
     const loginValue = document.getElementById('employee-login').value.trim();
     const password = document.getElementById('employee-password').value;
-    const role = document.getElementById('employee-role').value;
+    const role = 'admin';
     if (!name || !loginValue || !password) return alert('Заполните данные сотрудника.');
     try {
         const response = await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, login: loginValue, password, role }) });
@@ -1632,26 +1964,82 @@ async function editEmployee(id) {
     if (!name || !loginValue || !password) return;
     try {
         const response = await fetch(`/api/employees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, login: loginValue, password, role: item.role }) });
-        if (!response.ok) { const error = await response.json(); return alert(error.error || 'Ошибка изменения'); }
+        if (!response.ok) { const error = await response.json().catch(() => ({})); return alert(error.error || 'Не удалось изменить сотрудника'); }
         await fetchEmployees();
         showSystemToast('Сотрудник изменён');
     } catch (error) {
-        alert('Ошибка сети при изменении');
+        alert('Сервер недоступен. Проверьте подключение к базе данных.');
     }
 }
-function openShiftModal() { document.getElementById('shift-report-modal').classList.remove('hidden'); document.getElementById('shift-report-modal').classList.add('flex'); }
+async function saveAdminProfile() {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const loginValue = document.getElementById('admin-profile-login').value.trim();
+    const password = document.getElementById('admin-profile-password').value;
+    if (!loginValue || !password) return alert('Введите логин и пароль.');
+    try {
+        const response = await fetch(`/api/employees/${currentUser.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: currentUser.name, login: loginValue, password, role: 'admin' }) });
+        if (!response.ok) { const error = await response.json().catch(() => ({})); return alert(error.error || 'Не удалось изменить профиль'); }
+        currentUser = await response.json();
+        ADMIN_NAME = currentUser.name;
+        localStorage.setItem('restart_user', JSON.stringify(currentUser));
+        document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
+        document.getElementById('admin-profile-password').value = '';
+        await fetchEmployees();
+        closeProfileModal();
+        showSystemToast('Профиль администратора сохранён');
+    } catch (error) { alert('Сервер недоступен. Проверьте подключение к базе данных.'); }
+}
+function openProfileModal() {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    document.getElementById('admin-profile-login').value = currentUser.login || '';
+    document.getElementById('admin-profile-password').value = '';
+    document.getElementById('admin-profile-modal').classList.remove('hidden');
+    document.getElementById('admin-profile-modal').classList.add('flex');
+}
+function closeProfileModal() {
+    document.getElementById('admin-profile-modal').classList.add('hidden');
+    document.getElementById('admin-profile-modal').classList.remove('flex');
+}
+function openShiftModal() {
+    const previousCash = document.getElementById('previous-cash');
+    if (previousCash) previousCash.value = Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0);
+    document.getElementById('shift-report-modal').classList.remove('hidden');
+    document.getElementById('shift-report-modal').classList.add('flex');
+}
 function closeShiftModal() { document.getElementById('shift-report-modal').classList.add('hidden'); document.getElementById('shift-report-modal').classList.remove('flex'); }
-function confirmShiftReport() {
+async function confirmShiftReport() {
     const source = document.getElementById('shift-source').value;
-    const previousCash = Number(document.getElementById('previous-cash').value) || 0;
     const qr = Object.values(payments).reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const cash = Object.values(payments).reduce((sum, item) => sum + Number(item.cash || 0), 0);
-    const finalCash = previousCash + cash - (source === 'cash' ? 7000 : 0);
-    if (finalCash < 0) return alert('Итоговая наличная касса не может быть отрицательной. Проверьте вчерашнюю кассу.');
-    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, details: Object.values(payments) };
+    const previousCash = Number(document.getElementById('previous-cash').value) || 0;
+    const expenseTitle = document.getElementById('shift-expense-title').value.trim();
+    const expenseAmount = Number(document.getElementById('shift-expense-amount').value) || 0;
+    if (expenseAmount < 0 || (expenseAmount > 0 && !expenseTitle)) return alert('Укажите описание расхода.');
+    const actualCash = previousCash + cash;
+    let finalCash = actualCash;
+    if (expenseAmount > actualCash) return alert('Сумма расхода больше наличной кассы.');
+    finalCash -= expenseAmount;
+    if (source === 'cash') {
+        if (finalCash < 7000) return alert('После расхода в кассе недостаточно наличных для выдачи 7 000 ₸.');
+        finalCash = actualCash - 7000;
+        finalCash -= expenseAmount;
+    }
+    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, expenseTitle: expenseAmount > 0 ? expenseTitle : '', expenseAmount, details: Object.values(payments) };
+    const reportResponse = await fetch('/api/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) }).catch(() => null);
+    const reportSent = Boolean(reportResponse?.ok);
+    localStorage.setItem('last_shift_settlement', JSON.stringify({ cashOnHand: actualCash, source, balance: finalCash, date: report.date, admin: ADMIN_NAME }));
+    const cashBalanceResponse = await fetch('/api/cash-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: finalCash, user: ADMIN_NAME, dateKey: getLocalDateKey() }) }).catch(() => null);
+    if (cashBalanceResponse?.ok) {
+        currentCashBalance = await cashBalanceResponse.json();
+        localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+    }
     const history = getHistory(); history.push(report); localStorage.setItem('shift_history', JSON.stringify(history));
     localStorage.setItem('last_cash_balance', String(finalCash));
+    document.getElementById('shift-expense-title').value = '';
+    document.getElementById('shift-expense-amount').value = '';
+    renderLastSettlement();
     generateReport(report);
+    showSystemToast(reportSent ? 'Отчёт отправлен владельцу и IT' : 'Отчёт сохранён локально до восстановления связи');
 }
 
 function processFinance() {
@@ -1781,59 +2169,53 @@ window.addEventListener('load', () => {
     fetchEmployees();
 });
 
-// --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ ---
+// --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ --- // старый 
 async function syncAllData() {
     try {
+        await fetchCashBalance();
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
-            const activeKeys = new Set(activeRuns.map(run => run.key));
-
-            // 1. Сбрасываем завершенные комнаты (теперь работает, даже если 0 активных комнат)
-            ['std', 'promo', 'open'].forEach(type => {
-                for (let i = 1; i <= 4; i++) {
-                    const key = `${type}-${i}`;
-                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) {
-                        resetCard(type, i, false);
+            if (activeRuns.length > 0) {
+                const activeKeys = new Set(activeRuns.map(run => run.key));
+                ['std', 'promo', 'open'].forEach(type => {
+                    for (let i = 1; i <= 4; i++) {
+                        const key = `${type}-${i}`;
+                        if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
                     }
-                }
-            });
-
-            // 2. Отрисовываем текущие активные сессии
-            activeRuns.forEach(run => {
-                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
-                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
-                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
-            });
+                });
+                activeRuns.forEach(run => {
+                    const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                    localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                    renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+                });
+            }
         }
 
-        // 3. Синхронизация броней
         const resBookings = await fetch('/api/bookings');
         if (resBookings.ok) {
             const serverBookings = await resBookings.json();
-            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) {
-                localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
-            }
+            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
             refreshBookingUI();
         }
 
-        // 4. Синхронизация кассы и платежей
         const resPayments = await fetch('/api/payments');
         if (resPayments.ok) {
             const serverPayments = await resPayments.json();
             if (serverPayments.length > 0 || Object.keys(payments).length === 0) {
                 payments = {};
                 serverPayments.forEach(payment => {
-                    payments[payment.id] = { 
-                        ...payment, 
-                        dateKey: payment.date_key || payment.dateKey, 
-                        startStr: payment.start_str || payment.startStr, 
-                        endStr: payment.end_str || payment.endStr 
-                    };
+                    payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
                 });
                 localStorage.setItem('saved_payments', JSON.stringify(payments));
             }
             syncPaymentsToFinance();
+            if (isOwnerOrIT()) renderOwnerPanel();
+        }
+        const resReports = await fetch('/api/shift-reports');
+        if (resReports.ok) {
+            const serverReports = await resReports.json();
+            localStorage.setItem('shift_history', JSON.stringify(serverReports));
             if (isOwnerOrIT()) renderOwnerPanel();
         }
     } catch (error) {
@@ -1854,20 +2236,13 @@ async function startControl(type, id) {
     const isOpen = type === 'open';
     if (type === 'std') {
         const endInput = document.getElementById(`te-${key}`);
-        if (endInput.value) { 
-            endInput.value = normalizeTimeString(endInput.value); 
-            endTime = getM(endInput.value); 
-        }
+        if (endInput.value) { endInput.value = normalizeTimeString(endInput.value); endTime = getM(endInput.value); }
     } else if (type === 'promo') {
         endTime = startTime + 180;
     }
     const runData = { key, type, id, startTime, endTime, isOpen };
     try {
-        const response = await fetch('/api/runs', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(runData) 
-        });
+        const response = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runData) });
         if (!response.ok) throw new Error('Не удалось сохранить сессию');
         localStorage.setItem(`run_${key}`, JSON.stringify(runData));
         renderActiveState(key, type, id, startTime, endTime, isOpen);
@@ -1887,6 +2262,10 @@ async function resetCard(type, id, notifyServer = true) {
     if (status) { status.innerHTML = '<span class="status-dot dot-free"></span>Ожидание'; status.className = 'text-[10px] font-semibold text-gray-500 uppercase tracking-wider'; }
     const timer = document.getElementById(`tm-${key}`);
     if (timer) { timer.innerText = '00:00:00'; timer.style.color = '#fff'; }
+    const startInput = document.getElementById(`ts-${key}`);
+    const endInput = document.getElementById(`te-${key}`);
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
     const roomId = key.split('-').pop();
     const monitorCard = document.getElementById(`tablo-card-${roomId}`);
     const monitorTimer = document.getElementById(`tablo-tm-${roomId}`);
@@ -1914,18 +2293,19 @@ async function savePayment(key) {
     try {
         const response = await fetch('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) });
         if (!response.ok) throw new Error('payment');
-        document.getElementById(`cash-${key}`).value = '';
-        document.getElementById(`qr-${key}`).value = '';
-        await syncAllData();
-        showSystemToast('Оплата добавлена в общую кассу');
     } catch (error) {
         payments[payment.id] = payment;
         localStorage.setItem('saved_payments', JSON.stringify(payments));
         syncPaymentsToFinance();
         document.getElementById(`cash-${key}`).value = '';
         document.getElementById(`qr-${key}`).value = '';
-        showSystemToast('Не удалось сохранить оплату');
+        showSystemToast('Оплата сохранена локально до восстановления связи');
+        return;
     }
+    document.getElementById(`cash-${key}`).value = '';
+    document.getElementById(`qr-${key}`).value = '';
+    syncAllData().catch(() => {});
+    showSystemToast('Оплата добавлена в общую кассу');
 }
 
 async function addBooking() {
@@ -1962,20 +2342,6 @@ async function deleteBooking(id) {
     }
 }
 
-window.addEventListener('load', () => {
-    const savedDenominations = JSON.parse(localStorage.getItem('cash_denominations') || '{}');
-    document.querySelectorAll('.denom-count').forEach(input => {
-        const value = savedDenominations[input.dataset.val];
-        if (value !== undefined) input.value = value;
-        input.addEventListener('input', () => {
-            const next = {};
-            document.querySelectorAll('.denom-count').forEach(item => { next[item.dataset.val] = item.value; });
-            localStorage.setItem('cash_denominations', JSON.stringify(next));
-            calcCashFromQty();
-        });
-    });
-    calcCashFromQty();
-});
 </script>
 
 </body>
