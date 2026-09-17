@@ -2185,11 +2185,17 @@ window.addEventListener('load', () => {
 
 // --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ --- // старый 
 async function syncAllData() {
-    try {
-        await fetchCashBalance();
-        const resRuns = await fetch('/api/runs');
-        if (resRuns.ok) {
-            const activeRuns = await resRuns.json();
+    const syncChannel = async (request, apply) => {
+        try {
+            const response = await request;
+            if (response.ok) apply(await response.json());
+        } catch (error) {
+            console.warn('Канал синхронизации недоступен:', error);
+        }
+    };
+    await Promise.all([
+        fetchCashBalance().catch(error => console.warn('Касса не синхронизирована:', error)),
+        syncChannel(fetch('/api/runs'), activeRuns => {
             const activeKeys = new Set(activeRuns.map(run => run.key));
             ['std', 'promo', 'open'].forEach(type => {
                 for (let i = 1; i <= 4; i++) {
@@ -2202,45 +2208,34 @@ async function syncAllData() {
                 localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
                 renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
             });
-        }
-
-        const resBookings = await fetch('/api/bookings');
-        if (resBookings.ok) {
-            const serverBookings = await resBookings.json();
-            if (serverBookings.length > 0 || !localStorage.getItem('active_bookings')) localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
+        }),
+        syncChannel(fetch('/api/bookings'), serverBookings => {
+            localStorage.setItem('active_bookings', JSON.stringify(serverBookings));
             refreshBookingUI();
-        }
-
-        const resPayments = await fetch('/api/payments');
-        if (resPayments.ok) {
-            const serverPayments = await resPayments.json();
-            if (serverPayments.length > 0 || Object.keys(payments).length === 0) {
-                payments = {};
-                serverPayments.forEach(payment => {
-                    payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
-                });
-                localStorage.setItem('saved_payments', JSON.stringify(payments));
-            }
+        }),
+        syncChannel(fetch('/api/payments'), serverPayments => {
+            payments = {};
+            serverPayments.forEach(payment => {
+                payments[payment.id] = { ...payment, dateKey: payment.date_key || payment.dateKey, startStr: payment.start_str || payment.startStr, endStr: payment.end_str || payment.endStr };
+            });
+            localStorage.setItem('saved_payments', JSON.stringify(payments));
             syncPaymentsToFinance();
             if (isOwnerOrIT()) renderOwnerPanel();
-        }
-        const resReports = await fetch('/api/shift-reports');
-        if (resReports.ok) {
-            const serverReports = await resReports.json();
+        }),
+        syncChannel(fetch('/api/shift-reports'), serverReports => {
             localStorage.setItem('shift_history', JSON.stringify(serverReports));
             if (isOwnerOrIT()) renderOwnerPanel();
-        }
-        const resAdjustments = await fetch('/api/revenue-adjustments');
-        if (resAdjustments.ok) {
-            localStorage.setItem('revenue_adjustments', JSON.stringify(await resAdjustments.json()));
+        }),
+        syncChannel(fetch('/api/revenue-adjustments'), adjustments => {
+            localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
             if (isOwnerOrIT()) renderOwnerPanel();
-        }
-    } catch (error) {
-        console.warn('Ошибка синхронизации:', error);
-    }
+        })
+    ]);
 }
 
+syncAllData();
 setInterval(syncAllData, 2000);
+window.addEventListener('focus', syncAllData);
 
 async function startControl(type, id) {
     const key = `${type}-${id}`;
