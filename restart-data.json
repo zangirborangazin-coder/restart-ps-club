@@ -1,0 +1,58 @@
+{
+  "employees": [
+    {
+      "id": 1,
+      "name": "Мади",
+      "login": "Madi",
+      "password": "Asd1230123",
+      "role": "owner",
+      "fixed": true
+    },
+    {
+      "id": 2,
+      "name": "Еламан",
+      "login": "Elaman",
+      "password": "Asd1230123",
+      "role": "owner",
+      "fixed": true
+    },
+    {
+      "id": 3,
+      "name": "Нурбол",
+      "login": "Nurbol",
+      "password": "Asd1230123",
+      "role": "owner",
+      "fixed": true
+    },
+    {
+      "id": 4,
+      "name": "IT",
+      "login": "brngzn03",
+      "password": "Cocolimbo03",
+      "role": "it",
+      "fixed": true
+    },
+    {
+      "id": 5,
+      "name": "Администратор",
+      "login": "admin",
+      "password": "admin",
+      "role": "admin",
+      "fixed": true
+    },
+    {
+      "id": 6,
+      "name": "Администратор 2",
+      "login": "admin1",
+      "password": "Aa1234",
+      "role": "admin",
+      "fixed": true
+    }
+  ],
+  "runs": [],
+  "bookings": [],
+  "payments": [],
+  "shiftReports": [],
+  "revenueAdjustments": {},
+  "cashBalance": null
+}
