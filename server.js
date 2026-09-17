@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
@@ -28,10 +29,42 @@ let memoryShiftReports = [];
 let memoryRevenueAdjustments = {};
 let memoryPresence = [];
 let memoryCashBalance = null;
+const memoryStorePath = path.join(__dirname, 'restart-data.json');
+
+function loadMemoryStore() {
+	try {
+		const stored = JSON.parse(fs.readFileSync(memoryStorePath, 'utf8'));
+		if (Array.isArray(stored.employees) && stored.employees.length) memoryEmployees = stored.employees;
+		if (Array.isArray(stored.runs)) memoryRuns = stored.runs;
+		if (Array.isArray(stored.bookings)) memoryBookings = stored.bookings;
+		if (Array.isArray(stored.payments)) memoryPayments = stored.payments;
+		if (Array.isArray(stored.shiftReports)) memoryShiftReports = stored.shiftReports;
+		if (stored.revenueAdjustments && typeof stored.revenueAdjustments === 'object') memoryRevenueAdjustments = stored.revenueAdjustments;
+		if (stored.cashBalance) memoryCashBalance = stored.cashBalance;
+	} catch (_error) {
+		// Первый запуск: память заполнится системными значениями.
+	}
+}
+
+function saveMemoryStore() {
+	if (databaseAvailable) return;
+	fs.writeFileSync(memoryStorePath, JSON.stringify({
+		employees: memoryEmployees,
+		runs: memoryRuns,
+		bookings: memoryBookings,
+		payments: memoryPayments,
+		shiftReports: memoryShiftReports,
+		revenueAdjustments: memoryRevenueAdjustments,
+		cashBalance: memoryCashBalance
+	}, null, 2), 'utf8');
+}
+
+loadMemoryStore();
 
 async function initializeDatabase() {
 	if (!pool) {
 		databaseAvailable = false;
+		saveMemoryStore();
 		console.warn('DATABASE_URL не задан, сотрудники доступны только через PostgreSQL.');
 		return;
 	}
@@ -152,8 +185,17 @@ app.use((req, res, next) => {
 	if (req.method === 'OPTIONS') return res.sendStatus(204);
 	next();
 });
+app.use((_req, res, next) => {
+	res.on('finish', () => {
+		try { saveMemoryStore(); } catch (error) { console.error('Не удалось сохранить общие данные:', error.message); }
+	});
+	next();
+});
 app.use(express.static(__dirname));
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/api/health', (_req, res) => {
+	res.json({ ok: true, database: databaseAvailable ? 'postgresql' : 'fallback' });
+});
 
 app.get('/api/employees', async (_req, res) => {
 	if (!databaseAvailable) return res.json(memoryEmployees);
