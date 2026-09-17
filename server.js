@@ -15,19 +15,23 @@ const defaultEmployees = [
 	['Мади', 'Madi', 'Asd1230123', 'owner', true],
 	['Еламан', 'Elaman', 'Asd1230123', 'owner', true],
 	['Нурбол', 'Nurbol', 'Asd1230123', 'owner', true],
-	['IT', 'brngzn03', 'Cocolimbo03', 'it', true]
+	['IT', 'brngzn03', 'Cocolimbo03', 'it', true],
+	['Администратор', 'admin', 'admin', 'admin', true],
+	['Администратор 2', 'admin1', 'Aa1234', 'admin', true]
 ];
 let databaseAvailable = Boolean(pool);
 let memoryEmployees = defaultEmployees.map(([name, login, password, role, fixed], index) => ({ id: index + 1, name, login, password, role, fixed }));
 let memoryRuns = [];
 let memoryBookings = [];
 let memoryPayments = [];
+let memoryShiftReports = [];
 let memoryPresence = [];
+let memoryCashBalance = null;
 
 async function initializeDatabase() {
 	if (!pool) {
 		databaseAvailable = false;
-		console.warn('DATABASE_URL не задан, используется временное хранилище сотрудников.');
+		console.warn('DATABASE_URL не задан, сотрудники доступны только через PostgreSQL.');
 		return;
 	}
 
@@ -88,6 +92,35 @@ async function initializeDatabase() {
 			last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`);
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS cash_balance (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			amount INTEGER NOT NULL DEFAULT 0,
+			denominations JSONB NOT NULL DEFAULT '{}'::jsonb,
+			user_name TEXT NOT NULL,
+			date_key TEXT NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`);
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS shift_reports (
+			id BIGSERIAL PRIMARY KEY,
+			date_key TEXT NOT NULL,
+			report_date TEXT NOT NULL,
+			timestamp BIGINT NOT NULL,
+			admin TEXT NOT NULL,
+			qr INTEGER NOT NULL DEFAULT 0,
+			cash INTEGER NOT NULL DEFAULT 0,
+			previous_cash INTEGER NOT NULL DEFAULT 0,
+			source TEXT NOT NULL,
+			final_cash INTEGER NOT NULL DEFAULT 0,
+			total INTEGER NOT NULL DEFAULT 0,
+			details JSONB NOT NULL DEFAULT '[]'::jsonb
+		)
+	`);
+	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_title TEXT NOT NULL DEFAULT ''`);
+	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_amount INTEGER NOT NULL DEFAULT 0`);
+	await pool.query(`ALTER TABLE cash_balance ADD COLUMN IF NOT EXISTS denominations JSONB NOT NULL DEFAULT '{}'::jsonb`);
 	for (const [name, login, password, role, fixed] of defaultEmployees) {
 		await pool.query(
 			`INSERT INTO employees (name, login, password, role, fixed)
@@ -97,11 +130,18 @@ async function initializeDatabase() {
 	}
 	} catch (error) {
 		databaseAvailable = false;
-		console.warn('PostgreSQL недоступен, используется временное хранилище сотрудников:', error.message);
+		console.warn('PostgreSQL недоступен, сотрудники не будут загружены:', error.message);
 	}
 }
 
 app.use(express.json());
+app.use((req, res, next) => {
+	res.header('Access-Control-Allow-Origin', '*');
+	res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+	res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+	if (req.method === 'OPTIONS') return res.sendStatus(204);
+	next();
+});
 app.use(express.static(__dirname));
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
@@ -118,7 +158,7 @@ app.get('/api/employees', async (_req, res) => {
 
 app.post('/api/employees', async (req, res) => {
 	const { name, login, password, role } = req.body || {};
-	if (!name || !login || !password || !['admin', 'owner', 'it'].includes(role)) {
+	if (!name || !login || !password || role !== 'admin') {
 		return res.status(400).json({ error: 'Некорректные данные сотрудника' });
 	}
 	if (!databaseAvailable) {
@@ -184,6 +224,43 @@ app.delete('/api/employees/:id', async (req, res) => {
 		console.error('DELETE /api/employees/:id:', error);
 		res.status(500).json({ error: 'Не удалось удалить сотрудника' });
 	}
+});
+
+app.get('/api/shift-reports', async (_req, res) => {
+	if (!databaseAvailable) return res.json(memoryShiftReports);
+	try {
+		const { rows } = await pool.query('SELECT id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details FROM shift_reports ORDER BY timestamp');
+		res.json(rows);
+	} catch (error) { console.error('GET /api/shift-reports:', error); res.status(500).json({ error: 'Не удалось загрузить отчёты смен' }); }
+});
+
+app.post('/api/shift-reports', async (req, res) => {
+	const report = req.body || {};
+	if (!report.dateKey || !report.admin || !Number.isFinite(Number(report.total))) return res.status(400).json({ error: 'Некорректный отчёт смены' });
+	if (!databaseAvailable) {
+		const savedReport = { ...report, id: Date.now() };
+		memoryShiftReports.push(savedReport);
+		return res.status(201).json(savedReport);
+	}
+	try {
+		const { rows } = await pool.query(
+			`INSERT INTO shift_reports (date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details`,
+			[report.dateKey, report.date || report.dateKey, report.timestamp || Date.now(), report.admin, Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || [])]
+		);
+		res.status(201).json(rows[0]);
+	} catch (error) { console.error('POST /api/shift-reports:', error); res.status(500).json({ error: 'Не удалось сохранить отчёт смены' }); }
+});
+
+app.delete('/api/shift-reports/date/:dateKey', async (req, res) => {
+	if (!databaseAvailable) {
+		memoryShiftReports = memoryShiftReports.filter(report => report.dateKey !== req.params.dateKey);
+		return res.status(204).end();
+	}
+	try {
+		await pool.query('DELETE FROM shift_reports WHERE date_key = $1', [req.params.dateKey]);
+		res.status(204).end();
+	} catch (error) { console.error('DELETE /api/shift-reports/date:', error); res.status(500).json({ error: 'Не удалось очистить отчёты смен' }); }
 });
 
 app.get('/api/runs', async (_req, res) => {
@@ -284,6 +361,27 @@ app.delete('/api/presence/:sessionId', async (req, res) => {
 	}
 });
 
+app.get('/api/cash-balance', async (_req, res) => {
+	if (!databaseAvailable) return res.json(memoryCashBalance || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
+	try {
+		const { rows } = await pool.query('SELECT amount, denominations, user_name AS user, date_key, updated_at FROM cash_balance WHERE id = 1');
+		res.json(rows[0] || { amount: 0, denominations: {}, user: '', dateKey: '', updatedAt: '' });
+	} catch (error) { console.error('GET /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось загрузить кассу' }); }
+});
+
+app.post('/api/cash-balance', async (req, res) => {
+	const { amount, denominations = {}, user, dateKey } = req.body || {};
+	if (!Number.isFinite(Number(amount)) || Number(amount) < 0 || !user || !dateKey) return res.status(400).json({ error: 'Некорректная касса' });
+	if (!databaseAvailable) {
+		memoryCashBalance = { amount: Number(amount), denominations, user, dateKey, updatedAt: new Date().toLocaleTimeString('ru-RU') };
+		return res.json(memoryCashBalance);
+	}
+	try {
+		const { rows } = await pool.query(`INSERT INTO cash_balance (id, amount, denominations, user_name, date_key) VALUES (1,$1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET amount=$1,denominations=$2,user_name=$3,date_key=$4,updated_at=NOW() RETURNING amount,denominations,user_name AS user,date_key,updated_at`, [amount, JSON.stringify(denominations), user, dateKey]);
+		res.json(rows[0]);
+	} catch (error) { console.error('POST /api/cash-balance:', error); res.status(500).json({ error: 'Не удалось сохранить кассу' }); }
+});
+
 app.get('/api/payments', async (_req, res) => {
 	if (!databaseAvailable) return res.json(memoryPayments);
 	try { const { rows } = await pool.query('SELECT id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone FROM payments ORDER BY timestamp'); res.json(rows); }
@@ -298,6 +396,25 @@ app.post('/api/payments', async (req, res) => {
 		const { rows } = await pool.query(`INSERT INTO payments (id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET cash=$2,qr=$3,total=$9 RETURNING *`, [payment.id, payment.cash, payment.qr, payment.timestamp, payment.dateKey, payment.time, payment.startStr, payment.endStr, payment.total, payment.duration, payment.zone]);
 		res.status(201).json(rows[0]);
 	} catch (error) { console.error('POST /api/payments:', error); res.status(500).json({ error: 'Не удалось сохранить оплату' }); }
+});
+
+app.put('/api/payments/:id', async (req, res) => {
+	const { qr, cash, total } = req.body || {};
+	if (!Number.isFinite(Number(qr)) || !Number.isFinite(Number(cash)) || !Number.isFinite(Number(total)) || qr < 0 || cash < 0) return res.status(400).json({ error: 'Некорректные суммы' });
+	if (!databaseAvailable) {
+		const payment = memoryPayments.find(item => item.id === Number(req.params.id));
+		if (!payment) return res.status(404).json({ error: 'Оплата не найдена' });
+		Object.assign(payment, { qr: Number(qr), cash: Number(cash), total: Number(total) });
+		return res.json(payment);
+	}
+	try {
+		const { rows } = await pool.query('UPDATE payments SET qr = $1, cash = $2, total = $3 WHERE id = $4 RETURNING *', [qr, cash, total, req.params.id]);
+		if (!rows[0]) return res.status(404).json({ error: 'Оплата не найдена' });
+		res.json(rows[0]);
+	} catch (error) {
+		console.error('PUT /api/payments/:id:', error);
+		res.status(500).json({ error: 'Не удалось изменить оплату' });
+	}
 });
 
 app.delete('/api/payments/date/:dateKey', async (req, res) => {
