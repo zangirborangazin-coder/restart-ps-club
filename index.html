@@ -1721,30 +1721,42 @@ function renderSelectedRevenue() {
         document.getElementById('revenue-edit-cash').value = cash;
     }
 }
-function editRevenueValue(type) {
+async function editRevenueValue(type) {
     if (!currentUser || currentUser.role !== 'owner') return showSystemToast('Изменять выручку может только владелец');
     const dateKey = document.getElementById('revenue-date').value;
     const totals = getRevenueTotals(dateKey);
     const label = type === 'qr' ? 'QR, ₸' : 'Наличные, ₸';
     const value = Number(prompt(`${label} за ${dateKey.split('-').reverse().join('.')}:`, totals[type]));
     if (!Number.isFinite(value) || value < 0) return;
-    const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
-    adjustments[dateKey] = { qr: type === 'qr' ? value : totals.qr, cash: type === 'cash' ? value : totals.cash, changedBy: currentUser.name, changedAt: new Date().toISOString() };
-    localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+    await saveRevenueAdjustmentToServer(dateKey, type === 'qr' ? value : totals.qr, type === 'cash' ? value : totals.cash);
     renderOwnerPanel();
     showSystemToast('Выручка изменена');
 }
-function saveRevenueAdjustment() {
+async function saveRevenueAdjustment() {
     if (!currentUser || currentUser.role !== 'owner') return showSystemToast('Изменять выручку может только владелец');
     const dateKey = document.getElementById('revenue-date').value;
     const qr = Number(document.getElementById('revenue-edit-qr').value);
     const cash = Number(document.getElementById('revenue-edit-cash').value);
     if (!Number.isFinite(qr) || !Number.isFinite(cash) || qr < 0 || cash < 0) return alert('Введите корректные суммы.');
-    const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
-    adjustments[dateKey] = { qr, cash, changedBy: currentUser.name, changedAt: new Date().toISOString() };
-    localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+    await saveRevenueAdjustmentToServer(dateKey, qr, cash);
     renderOwnerPanel();
     showSystemToast('Выручка сохранена');
+}
+async function saveRevenueAdjustmentToServer(dateKey, qr, cash) {
+    const adjustment = { qr, cash, changedBy: currentUser.name, changedAt: new Date().toISOString() };
+    try {
+        const response = await fetch(`/api/revenue-adjustments/${dateKey}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(adjustment) });
+        if (!response.ok) throw new Error('adjustment');
+        const saved = await response.json();
+        const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
+        adjustments[dateKey] = saved;
+        localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+    } catch (error) {
+        const adjustments = JSON.parse(localStorage.getItem('revenue_adjustments') || '{}');
+        adjustments[dateKey] = adjustment;
+        localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
+        showSystemToast('Корректировка сохранена локально до восстановления связи');
+    }
 }
 let revenueCalendarMonth = null;
 function formatRevenueMonth(monthKey) {
@@ -1790,7 +1802,8 @@ async function clearRevenue(scope) {
     localStorage.setItem('saved_payments', JSON.stringify(payments));
     await Promise.all(dates.flatMap(dateKey => [
         fetch(`/api/payments/date/${dateKey}`, { method: 'DELETE' }).catch(() => null),
-        fetch(`/api/shift-reports/date/${dateKey}`, { method: 'DELETE' }).catch(() => null)
+        fetch(`/api/shift-reports/date/${dateKey}`, { method: 'DELETE' }).catch(() => null),
+        fetch(`/api/revenue-adjustments/${dateKey}`, { method: 'DELETE' }).catch(() => null)
     ]));
     syncPaymentsToFinance();
     renderOwnerPanel();
@@ -1875,6 +1888,7 @@ async function clearTodayPayments() {
         localStorage.setItem('revenue_adjustments', JSON.stringify(adjustments));
         localStorage.setItem('shift_history', JSON.stringify(getHistory().filter(item => getRevenueDateKey(item) !== today)));
         await fetch(`/api/shift-reports/date/${today}`, { method: 'DELETE' }).catch(() => null);
+        await fetch(`/api/revenue-adjustments/${today}`, { method: 'DELETE' }).catch(() => null);
         localStorage.setItem('saved_payments', JSON.stringify(payments));
         syncPaymentsToFinance();
         renderOwnerPanel();
@@ -2176,20 +2190,18 @@ async function syncAllData() {
         const resRuns = await fetch('/api/runs');
         if (resRuns.ok) {
             const activeRuns = await resRuns.json();
-            if (activeRuns.length > 0) {
-                const activeKeys = new Set(activeRuns.map(run => run.key));
-                ['std', 'promo', 'open'].forEach(type => {
-                    for (let i = 1; i <= 4; i++) {
-                        const key = `${type}-${i}`;
-                        if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
-                    }
-                });
-                activeRuns.forEach(run => {
-                    const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
-                    localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
-                    renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
-                });
-            }
+            const activeKeys = new Set(activeRuns.map(run => run.key));
+            ['std', 'promo', 'open'].forEach(type => {
+                for (let i = 1; i <= 4; i++) {
+                    const key = `${type}-${i}`;
+                    if (!activeKeys.has(key) && localStorage.getItem(`run_${key}`)) resetCard(type, i, false);
+                }
+            });
+            activeRuns.forEach(run => {
+                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
+                renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
+            });
         }
 
         const resBookings = await fetch('/api/bookings');
@@ -2216,6 +2228,11 @@ async function syncAllData() {
         if (resReports.ok) {
             const serverReports = await resReports.json();
             localStorage.setItem('shift_history', JSON.stringify(serverReports));
+            if (isOwnerOrIT()) renderOwnerPanel();
+        }
+        const resAdjustments = await fetch('/api/revenue-adjustments');
+        if (resAdjustments.ok) {
+            localStorage.setItem('revenue_adjustments', JSON.stringify(await resAdjustments.json()));
             if (isOwnerOrIT()) renderOwnerPanel();
         }
     } catch (error) {
