@@ -17,8 +17,8 @@ const defaultEmployees = [
 	['Еламан', 'Elaman', 'Asd1230123', 'owner', true],
 	['Нурбол', 'Nurbol', 'Asd1230123', 'owner', true],
 	['IT', 'brngzn03', 'Cocolimbo03', 'it', true],
-	['Администратор', 'admin', 'admin', 'admin', true],
-	['Администратор 2', 'admin1', 'Aa1234', 'admin', true]
+	['Zhangir', 'Zhangir', 'Cocolimbo03', 'admin', true],
+	['Администратор', 'admin', 'Aa1234', 'admin', true]
 ];
 let databaseAvailable = Boolean(pool);
 let memoryEmployees = defaultEmployees.map(([name, login, password, role, fixed], index) => ({ id: index + 1, name, login, password, role, fixed }));
