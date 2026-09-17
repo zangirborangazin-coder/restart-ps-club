@@ -11,19 +11,20 @@
     <link rel="shortcut icon" href="/favicon.svg" type="image/x-icon">
     <style>
         :root { 
-            --bg: #000000;
-            --card: #0a0a0a;
-            --accent: #007aff; 
-            --border: rgba(255, 255, 255, 0.08);
-            --text-secondary: #86868b;
+            --bg: #060912;
+            --card: #101827;
+            --accent: #55d6ff; 
+            --accent-strong: #159ed3;
+            --mint: #72e6b0;
+            --border: rgba(148, 191, 224, 0.16);
+            --text-secondary: #91a2b8;
         }
         
         body { 
             font-family: 'Inter', sans-serif; 
-            background: radial-gradient(circle at 20% 10%, rgba(59,130,246,0.16), transparent 20%),
-                        radial-gradient(circle at 90% 15%, rgba(16,185,129,0.12), transparent 18%),
-                        radial-gradient(circle at 50% 95%, rgba(168,85,247,0.14), transparent 24%),
-                        #050711;
+            background: radial-gradient(circle at 8% 0%, rgba(44,155,211,0.2), transparent 26%),
+                        radial-gradient(circle at 96% 24%, rgba(55,211,155,0.12), transparent 24%),
+                        linear-gradient(135deg, #060912 0%, #091323 52%, #050811 100%);
             color: #f8fafc; 
             margin: 0; 
             min-height: 100vh;
@@ -32,22 +33,22 @@
         }
 
         .stealth-card {
-            background: rgba(10, 14, 28, 0.92);
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            border-radius: 28px;
-            transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.32);
-            backdrop-filter: blur(18px);
+            background: linear-gradient(145deg, rgba(18,30,49,0.94), rgba(8,15,28,0.96));
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.035);
+            backdrop-filter: blur(16px);
         }
 
         .stealth-card:hover {
             transform: translateY(-2px);
-            border-color: rgba(56, 189, 248, 0.2);
-            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
+            border-color: rgba(85,214,255,0.38);
+            box-shadow: 0 22px 58px rgba(0,0,0,0.34), 0 0 0 1px rgba(85,214,255,0.05);
         }
 
         nav { 
-            background: rgba(3, 7, 15, 0.92);
+            background: rgba(5, 10, 20, 0.88);
             backdrop-filter: saturate(180%) blur(20px);
             height: 60px;       
             border-bottom: 1px solid rgba(148, 163, 184, 0.16);
@@ -58,16 +59,16 @@
         .nav-link { 
             padding: 0 22px; cursor: pointer; color: rgba(226, 232, 240, 0.75);
             font-size: 13px; font-weight: 600; transition: 0.2s;
-            border-radius: 999px;
+            border-radius: 14px;
             line-height: 60px;
         }
 
-        .nav-link:hover { color: #ffffff; background: rgba(255,255,255,0.06); }
+        .nav-link:hover { color: #ffffff; background: rgba(85,214,255,0.08); }
 
         .nav-link.active { 
             color: #ffffff;
-            background: rgba(56, 189, 248, 0.14);
-            box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.16);
+            background: linear-gradient(135deg, rgba(85,214,255,0.2), rgba(21,158,211,0.12));
+            box-shadow: inset 0 0 0 1px rgba(85,214,255,0.2), 0 8px 24px rgba(21,158,211,0.12);
         }
 
         .timer-minimal {
@@ -78,14 +79,14 @@
         }
 
         .btn-stealth {
-            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+            background: linear-gradient(135deg, #72e6b0, #36bde9 58%, #168fca);
             color: #020617;
             font-weight: 700;
             font-size: 13px;
-            border-radius: 999px;
+            border-radius: 14px;
             padding: 14px 24px;
             transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-            box-shadow: 0 14px 36px rgba(56, 189, 248, 0.26);
+            box-shadow: 0 12px 30px rgba(28,174,218,0.26);
         }
 
         .btn-stealth:hover {
@@ -119,22 +120,22 @@
             background: rgba(255, 255, 255, 0.06);
             color: #ffffff;
             font-size: 13px;
-            border-radius: 16px;
+            border-radius: 13px;
             transition: background 0.2s ease, transform 0.2s ease;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(148,191,224,0.16);
             padding: 12px 18px;
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(85,214,255,0.12);
             transform: translateY(-1px);
         }
 
         input, select {
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background: rgba(8,15,28,0.72) !important;
+            border: 1px solid rgba(148,191,224,0.17) !important;
             color: white !important;
-            border-radius: 14px !important;
+            border-radius: 13px !important;
             padding: 12px 14px !important;
             font-size: 14px !important;
             outline: none !important;
@@ -142,8 +143,8 @@
         }
 
         input:focus, select:focus {
-            border-color: rgba(56, 189, 248, 0.65) !important;
-            box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.12);
+            border-color: rgba(85,214,255,0.7) !important;
+            box-shadow: 0 0 0 4px rgba(85,214,255,0.12), 0 10px 28px rgba(0,0,0,0.16);
         }
 
         .revenue-calendar {
@@ -470,6 +471,167 @@
             .section-head { align-items: flex-start; flex-direction: column; }
             .stealth-card { border-radius: 20px; }
             .timer-minimal { font-size: 2rem; }
+        }
+
+        .section-title { letter-spacing: 0; }
+        .section-label { color: #8fa8bf; letter-spacing: 0.12em; }
+        .owner-stat {
+            background: linear-gradient(145deg, rgba(19,34,56,0.8), rgba(9,18,32,0.72));
+            border-color: rgba(85,214,255,0.14);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+        }
+        .owner-stat .text-2xl { color: #f5fbff; }
+        .owner-table th { color: #7fa0bb; border-bottom-color: rgba(85,214,255,0.16); }
+        .owner-table td { border-bottom-color: rgba(148,191,224,0.1); color: #d7e4ef; }
+        .owner-table tbody tr:hover { background: rgba(85,214,255,0.045); }
+        .revenue-calendar {
+            background: rgba(5,13,25,0.62);
+            border-color: rgba(85,214,255,0.18);
+            box-shadow: 0 16px 38px rgba(0,0,0,0.18);
+        }
+        .revenue-calendar-weekdays { color: #7fa0bb; background: rgba(85,214,255,0.045); }
+        .revenue-day { border-color: rgba(148,191,224,0.1); }
+        .revenue-day.has-revenue { background: rgba(114,230,176,0.09); }
+        .revenue-day.selected { box-shadow: inset 0 0 0 1px rgba(114,230,176,0.7); }
+        #cash-page .stealth-card { min-width: 0; max-width: none; }
+        #cash-page .stealth-card:hover { border-color: rgba(114,230,176,0.32); }
+        #cash-page .bg-blue-600\/10 { background: linear-gradient(145deg, rgba(29,112,158,0.2), rgba(45,180,148,0.1)); }
+        #cash-page .text-4xl { color: #effcff; text-shadow: 0 0 28px rgba(85,214,255,0.22); }
+        #login-screen { background: radial-gradient(circle at 50% 15%, rgba(44,155,211,0.18), transparent 32%), #050811; }
+        .role-chip { background: rgba(85,214,255,0.12); border: 1px solid rgba(85,214,255,0.18); }
+        #system-toast { background: linear-gradient(135deg, rgba(22,125,169,0.96), rgba(19,75,107,0.96)); box-shadow: 0 12px 40px rgba(21,158,211,0.3); }
+        @media (max-width: 700px) {
+            nav { border-radius: 0 0 18px 18px; }
+            #cash-page .grid { grid-template-columns: 1fr; }
+            #cash-page .stealth-card { width: 100%; }
+        }
+
+        /* Responsive layout: one fluid system from small phones to 4K displays. */
+        *, *::before, *::after { box-sizing: border-box; }
+        html { width: 100%; max-width: 100%; overflow-x: hidden; }
+        body { width: 100%; max-width: 100vw; font-size: clamp(0.875rem, 0.18vw + 0.78rem, 1.05rem); }
+        img, svg, video, canvas { max-width: 100%; height: auto; }
+        button, input, select { min-height: 2.75rem; touch-action: manipulation; }
+        button { max-width: 100%; }
+        .page, .stealth-card, .grid, .flex, table { min-width: 0; }
+        .page {
+            width: min(100vw, 100rem);
+            max-width: 100%;
+            margin-inline: auto;
+            padding: clamp(1.25rem, 2.4vw, 3.5rem) clamp(1rem, 3vw, 4rem) !important;
+        }
+        .section-head { margin-bottom: clamp(1rem, 2vw, 2rem); }
+        .section-title { font-size: clamp(1.35rem, 1.1vw + 0.9rem, 2.25rem); }
+        .stealth-card { border-radius: clamp(1rem, 1.2vw, 1.5rem); }
+        .nav-link {
+            padding-inline: clamp(0.7rem, 1.25vw, 1.5rem);
+            font-size: clamp(0.72rem, 0.25vw + 0.58rem, 0.95rem);
+            white-space: nowrap;
+        }
+        .btn-stealth, .btn-secondary {
+            padding: clamp(0.65rem, 0.8vw, 0.9rem) clamp(0.85rem, 1.3vw, 1.5rem);
+            font-size: clamp(0.75rem, 0.18vw + 0.64rem, 0.95rem);
+        }
+        input, select {
+            width: 100%;
+            max-width: 100%;
+            font-size: clamp(0.82rem, 0.2vw + 0.7rem, 1rem) !important;
+        }
+        .grid > *, .flex > * { min-width: 0; }
+        .overflow-auto, .overflow-x-auto { max-width: 100%; scrollbar-width: thin; }
+        .owner-table { min-width: 42rem; }
+        .owner-table th, .owner-table td { padding: clamp(0.55rem, 0.8vw, 0.9rem); }
+
+        #cash-page { width: min(100vw, 100rem); }
+        #cash-page .grid { grid-template-columns: none; gap: clamp(1rem, 2.5vw, 3rem); }
+        #cash-page .grid::before { display: none; }
+        #cash-page .stealth-card { min-width: 0; width: 100%; max-width: none; }
+        #cash-content-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            width: min(100%, 70rem);
+            gap: clamp(1rem, 2.5vw, 2.5rem);
+        }
+        #cash-content-grid .stealth-card { min-height: 100%; }
+        #cash-page .stealth-card .p-8 { padding: clamp(1rem, 2vw, 2rem); }
+        #cash-page .stealth-card .mt-12 { margin-top: clamp(1.5rem, 3vw, 3rem); }
+        .timer-minimal { font-size: clamp(1.65rem, 2.4vw, 3.5rem); }
+
+        .revenue-calendar { width: 100%; }
+        .revenue-day { min-height: clamp(2.9rem, 4vw, 5rem); padding: clamp(0.3rem, 0.6vw, 0.65rem); }
+        .revenue-day-number { font-size: clamp(0.68rem, 0.25vw + 0.55rem, 0.9rem); }
+        .revenue-day-total { font-size: clamp(0.5rem, 0.18vw + 0.42rem, 0.75rem); overflow-wrap: anywhere; }
+
+        @media (max-width: 767px) {
+            nav {
+                min-height: 3.75rem;
+                height: auto;
+                width: 100%;
+                padding: 0.4rem;
+                gap: 0.25rem;
+                justify-content: flex-start;
+                overflow-x: auto;
+                scrollbar-width: none;
+            }
+            nav::-webkit-scrollbar { display: none; }
+            nav .nav-link { line-height: 2.7rem; padding-inline: 0.7rem; }
+            nav .presence-link { min-width: 9rem; }
+            .section-head { align-items: flex-start; flex-direction: column; }
+            .page { padding-inline: clamp(0.75rem, 4vw, 1.5rem) !important; }
+            #cash-content-grid { grid-template-columns: 1fr; }
+            #cash-content-grid .stealth-card { min-height: auto; }
+            #last-shift-result { grid-column: auto; }
+            .revenue-calendar-weekdays { font-size: 0.58rem; }
+            .revenue-calendar-weekdays div { padding-inline: 0.1rem; }
+            .owner-stat { padding: clamp(0.75rem, 3vw, 1.1rem); }
+            .owner-table { min-width: 38rem; }
+            #login-screen { padding: 1rem; }
+            #login-screen .login-box {
+                width: min(100%, 22rem);
+                padding: clamp(1.35rem, 6vw, 2rem);
+                text-align: center;
+                border-radius: 1.5rem;
+            }
+            #login-screen .login-box > div:first-child,
+            #login-screen .login-box h1,
+            #login-screen .login-box p { text-align: center; }
+            #login-screen .login-box h1 { font-size: clamp(1.65rem, 7vw, 2.15rem); line-height: 1.1; }
+            #login-screen .login-box p { margin-bottom: 1.5rem; }
+            #login-screen .login-box input {
+                height: 3.15rem;
+                text-align: center;
+                font-size: 1rem !important;
+                letter-spacing: 0.02em;
+            }
+            #login-screen .login-box input::placeholder { text-align: center; }
+            #login-screen .login-box .btn-stealth { width: 100%; min-height: 3.15rem; }
+            #login-screen .access-warning { text-align: center; }
+        }
+
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .page { width: min(100%, 64rem); }
+            #cash-content-grid { width: min(100%, 52rem); }
+            .nav-link { padding-inline: 0.8rem; }
+        }
+
+        @media (min-width: 1920px) {
+            .page { width: min(100% - 6vw, 104rem); }
+            nav { height: clamp(3.75rem, 3vw, 5rem); }
+            .nav-link { line-height: clamp(3.75rem, 3vw, 5rem); }
+        }
+
+        @media (min-width: 2560px) {
+            .page { width: min(100% - 8vw, 112rem); }
+            .stealth-card { box-shadow: 0 24px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04); }
+        }
+
+        @media (min-width: 3200px) {
+            body { font-size: 1.08rem; }
+            .page { width: min(100% - 10vw, 120rem); }
+        }
+
+        @media (orientation: landscape) and (max-width: 767px) {
+            #cash-content-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .page { padding-block: 1rem !important; }
         }
     </style>
 </head>
@@ -2082,6 +2244,14 @@ function syncPaymentsToFinance() {
         if (p.qr > 0) qrLog.push(p.qr);
     });
 
+    if (isOwnerOrIT()) {
+        const today = getLocalDateKey();
+        getHistory().filter(report => getRevenueDateKey(report) === today).forEach(report => {
+            if (Number(report.cash || 0) > 0) cashLog.push(Number(report.cash));
+            if (Number(report.qr || 0) > 0) qrLog.push(Number(report.qr));
+        });
+    }
+
     const cashField = document.getElementById('cash-input-finance');
     const qrField = document.getElementById('qr-input');
     
@@ -2147,8 +2317,9 @@ function savePayment(key) {
 }
 
 // --- 5. ЭКСПОРТ И ПОЛНОЕ ОБНУЛЕНИЕ ---
-function generateReport(report) {
+async function generateReport(report) {
     if (!report) { if (Object.keys(payments).length === 0) return alert('Нет данных для сдачи смены'); openShiftModal(); return; }
+    await fetch(`/api/payments/date/${report.dateKey}`, { method: 'DELETE' }).catch(() => null);
     Object.keys(localStorage).filter(key => key.startsWith('run_')).forEach(key => localStorage.removeItem(key));
     localStorage.removeItem('saved_payments'); payments = {}; closeShiftModal(); syncPaymentsToFinance(); renderOwnerPanel();
     alert(`Отчёт принят на сайте. В кассе осталось ${report.finalCash.toLocaleString()} ₸.`);
