@@ -34,16 +34,16 @@
     },
     {
       "id": 5,
-      "name": "Администратор",
-      "login": "admin",
-      "password": "admin",
+      "name": "Zhangir",
+      "login": "Zhangir",
+      "password": "Cocolimbo03",
       "role": "admin",
       "fixed": true
     },
     {
       "id": 6,
-      "name": "Администратор 2",
-      "login": "admin1",
+      "name": "Администратор",
+      "login": "admin",
       "password": "Aa1234",
       "role": "admin",
       "fixed": true
