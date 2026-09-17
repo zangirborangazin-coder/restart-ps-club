@@ -25,6 +25,7 @@ let memoryRuns = [];
 let memoryBookings = [];
 let memoryPayments = [];
 let memoryShiftReports = [];
+let memoryRevenueAdjustments = {};
 let memoryPresence = [];
 let memoryCashBalance = null;
 
@@ -120,6 +121,15 @@ async function initializeDatabase() {
 	`);
 	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_title TEXT NOT NULL DEFAULT ''`);
 	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_amount INTEGER NOT NULL DEFAULT 0`);
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS revenue_adjustments (
+			date_key TEXT PRIMARY KEY,
+			qr INTEGER NOT NULL DEFAULT 0,
+			cash INTEGER NOT NULL DEFAULT 0,
+			changed_by TEXT NOT NULL,
+			changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`);
 	await pool.query(`ALTER TABLE cash_balance ADD COLUMN IF NOT EXISTS denominations JSONB NOT NULL DEFAULT '{}'::jsonb`);
 	for (const [name, login, password, role, fixed] of defaultEmployees) {
 		await pool.query(
@@ -261,6 +271,37 @@ app.delete('/api/shift-reports/date/:dateKey', async (req, res) => {
 		await pool.query('DELETE FROM shift_reports WHERE date_key = $1', [req.params.dateKey]);
 		res.status(204).end();
 	} catch (error) { console.error('DELETE /api/shift-reports/date:', error); res.status(500).json({ error: 'Не удалось очистить отчёты смен' }); }
+});
+
+app.get('/api/revenue-adjustments', async (_req, res) => {
+	if (!databaseAvailable) return res.json(memoryRevenueAdjustments);
+	try {
+		const { rows } = await pool.query('SELECT date_key,qr,cash,changed_by AS "changedBy",changed_at AS "changedAt" FROM revenue_adjustments');
+		res.json(Object.fromEntries(rows.map(row => [row.date_key, row])));
+	} catch (error) { console.error('GET /api/revenue-adjustments:', error); res.status(500).json({ error: 'Не удалось загрузить корректировки выручки' }); }
+});
+
+app.put('/api/revenue-adjustments/:dateKey', async (req, res) => {
+	const { qr, cash, changedBy } = req.body || {};
+	if (!Number.isFinite(Number(qr)) || !Number.isFinite(Number(cash)) || Number(qr) < 0 || Number(cash) < 0 || !changedBy) return res.status(400).json({ error: 'Некорректная корректировка' });
+	const adjustment = { qr: Number(qr), cash: Number(cash), changedBy: String(changedBy), changedAt: new Date().toISOString() };
+	if (!databaseAvailable) {
+		memoryRevenueAdjustments[req.params.dateKey] = adjustment;
+		return res.json(adjustment);
+	}
+	try {
+		const { rows } = await pool.query(`INSERT INTO revenue_adjustments (date_key,qr,cash,changed_by) VALUES ($1,$2,$3,$4) ON CONFLICT (date_key) DO UPDATE SET qr=$2,cash=$3,changed_by=$4,changed_at=NOW() RETURNING date_key,qr,cash,changed_by AS "changedBy",changed_at AS "changedAt"`, [req.params.dateKey, adjustment.qr, adjustment.cash, adjustment.changedBy]);
+		res.json(rows[0]);
+	} catch (error) { console.error('PUT /api/revenue-adjustments:', error); res.status(500).json({ error: 'Не удалось сохранить корректировку' }); }
+});
+
+app.delete('/api/revenue-adjustments/:dateKey', async (req, res) => {
+	if (!databaseAvailable) {
+		delete memoryRevenueAdjustments[req.params.dateKey];
+		return res.status(204).end();
+	}
+	try { await pool.query('DELETE FROM revenue_adjustments WHERE date_key = $1', [req.params.dateKey]); res.status(204).end(); }
+	catch (error) { console.error('DELETE /api/revenue-adjustments:', error); res.status(500).json({ error: 'Не удалось удалить корректировку' }); }
 });
 
 app.get('/api/runs', async (_req, res) => {
