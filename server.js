@@ -180,7 +180,7 @@ async function initializeDatabase() {
 	}
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 app.use((req, res, next) => {
 	res.header('Access-Control-Allow-Origin', '*');
 	res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -321,6 +321,25 @@ app.put('/api/shift-reports/:id/meta', async (req, res) => {
 		if (!rows[0]) return res.status(404).json({ error: 'Смена не найдена' });
 		res.json(rows[0]);
 	} catch (error) { console.error('PUT /api/shift-reports/:id/meta:', error); res.status(500).json({ error: 'Не удалось сохранить данные смены' }); }
+});
+
+app.put('/api/shift-reports/:id', async (req, res) => {
+	const report = req.body || {};
+	if (!report.dateKey || !report.admin || !Number.isFinite(Number(report.total))) return res.status(400).json({ error: 'Некорректный отчёт смены' });
+	if (!databaseAvailable) {
+		const index = memoryShiftReports.findIndex(item => String(item.id) === String(req.params.id));
+		if (index === -1) return res.status(404).json({ error: 'Смена не найдена' });
+		memoryShiftReports[index] = { ...memoryShiftReports[index], ...report, id: memoryShiftReports[index].id };
+		return res.json(memoryShiftReports[index]);
+	}
+	try {
+		const { rows } = await pool.query(
+			`UPDATE shift_reports SET date_key=$1,report_date=$2,timestamp=$3,admin=$4,qr=$5,cash=$6,previous_cash=$7,source=$8,final_cash=$9,total=$10,details=$11,shift_meta=$12 WHERE id=$13 RETURNING id,date_key AS "dateKey",report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,details,shift_meta AS "shiftMeta"`,
+			[report.dateKey, report.date || report.dateKey, report.timestamp || Date.now(), report.admin, Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'shift_closed', Number(report.finalCash) || 0, Number(report.total) || 0, JSON.stringify(report.details || []), JSON.stringify(report.shiftMeta || {}), req.params.id]
+		);
+		if (!rows[0]) return res.status(404).json({ error: 'Смена не найдена' });
+		res.json(rows[0]);
+	} catch (error) { console.error('PUT /api/shift-reports/:id:', error); res.status(500).json({ error: 'Не удалось закрыть смену' }); }
 });
 
 app.delete('/api/shift-reports/date/:dateKey', async (req, res) => {
