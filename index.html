@@ -911,6 +911,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div class="stealth-card p-6">
             <h2 class="font-bold text-lg mb-5">История смен</h2>
+            <div id="owner-live-shift-status" class="mb-5 space-y-2"></div>
             <div class="overflow-auto"><table class="owner-table"><thead><tr><th>Дата</th><th>Админ</th><th>QR</th><th>Наличные</th><th>Расход</th><th>Касса</th><th></th></tr></thead><tbody id="history-body"></tbody></table></div>
         </div>
         <div class="stealth-card p-6">
@@ -2516,9 +2517,38 @@ function renderRevenueCalendar() {
     document.getElementById('revenue-calendar-title').innerText = formatRevenueMonth(revenueCalendarMonth);
     renderSelectedRevenue();
 }
+let ownerShiftStatusInterval = null;
+function renderOwnerLiveShiftStatus(history) {
+    const box = document.getElementById('owner-live-shift-status');
+    if (!box) return;
+    clearInterval(ownerShiftStatusInterval);
+    const dateKey = getShiftDateKey();
+    const activeShifts = history.filter(item => {
+        const itemDateKey = item.dateKey || getRevenueDateKey(item);
+        return itemDateKey === dateKey && item.source === 'shift_opened' && item.shiftMeta?.status !== 'closed';
+    });
+    if (!activeShifts.length) {
+        box.innerHTML = '<div class="text-sm text-slate-500">Открытых смен сейчас нет</div>';
+        return;
+    }
+    const render = () => {
+        const remaining = Math.max(0, getShiftCloseDate().getTime() - Date.now());
+        const hours = Math.floor(remaining / 3600000);
+        const minutes = Math.floor((remaining % 3600000) / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        const countdown = remaining ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : 'время вышло';
+        box.innerHTML = activeShifts.map(item => {
+            const meta = item.shiftMeta || {};
+            return `<div class="border border-cyan-400/20 rounded-xl bg-cyan-400/[0.06] px-4 py-3 text-sm"><div class="flex flex-wrap items-center justify-between gap-2"><strong class="text-cyan-200">${escapeHtml(item.admin || 'Администратор')} · Смена открыта</strong><span class="text-cyan-300 font-mono">15:00–03:00 · до закрытия ${countdown}</span></div><div class="text-xs text-slate-300 mt-2">Касса: ${Number(meta.cash || 0).toLocaleString()} ₸ · Взял: ${Number(meta.taken || 0).toLocaleString()} ₸ · Остался: ${Number(meta.remaining || 0).toLocaleString()} ₸</div></div>`;
+        }).join('');
+    };
+    render();
+    ownerShiftStatusInterval = setInterval(render, 1000);
+}
 function renderOwnerPanel() {
     if (!isOwnerOrIT()) return;
     const history = getHistory();
+    renderOwnerLiveShiftStatus(history);
     const today = getRevenueForDate(getLocalDateKey());
     const todayDate = new Date();
     const weekStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - ((todayDate.getDay() + 6) % 7));
