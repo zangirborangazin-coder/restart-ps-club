@@ -1764,7 +1764,22 @@ function initAccess() {
 
 // --- 2. ВХОД В СИСТЕМУ ---
 // --- 3. ГЛАВНЫЙ РАСЧЕТ КАССЫ ---
-function getHistory() { return JSON.parse(localStorage.getItem('shift_history') || '[]'); }
+function getHistory() {
+    const history = JSON.parse(localStorage.getItem('shift_history') || '[]');
+    return history.map(item => {
+        const dateKey = item.dateKey || getRevenueDateKey(item);
+        const adminName = item.admin || ADMIN_NAME;
+        if (!dateKey || !adminName) return item;
+        const persisted = restorePersistedAdminReceipts(dateKey, adminName);
+        if (!Array.isArray(persisted) || !persisted.length) return item;
+        const meta = { ...(item.shiftMeta || {}) };
+        if (!Array.isArray(meta.receipts) || !meta.receipts.length) {
+            meta.receipts = persisted;
+            return { ...item, shiftMeta: meta };
+        }
+        return item;
+    });
+}
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
 let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
 let adminShiftClockInterval = null;
@@ -1938,7 +1953,8 @@ function renderOwnerReceiptBox() {
     const history = getHistory();
     const photos = history.flatMap(item => {
         const meta = item.shiftMeta || {};
-        const receipts = Array.isArray(meta.receipts) ? meta.receipts : [];
+        const persisted = (!item.dateKey && !item.admin) ? [] : restorePersistedAdminReceipts(item.dateKey || getRevenueDateKey(item), item.admin || ADMIN_NAME);
+        const receipts = Array.isArray(meta.receipts) && meta.receipts.length ? meta.receipts : persisted;
         return receipts.filter(receipt => receipt && (receipt.dataUrl || receipt.url || (typeof receipt === 'string' && receipt.startsWith('data:')))).map((receipt, index) => {
             const dataUrl = typeof receipt === 'string' ? receipt : (receipt.dataUrl || receipt.url);
             const name = typeof receipt === 'string' ? `Чек ${index + 1}` : (receipt.name || `Чек ${index + 1}`);
@@ -2414,10 +2430,10 @@ function renderOwnerPanel() {
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
     const canEditFinancials = ['owner', 'it'].includes(getUserRole());
-    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => { const meta = item.shiftMeta || {}; const opened = meta.openedAt ? new Date(meta.openedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '-'; const closed = meta.closedAt ? new Date(meta.closedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'открыта'; const photos = Array.isArray(meta.receipts) ? meta.receipts.filter(receipt => receipt && (receipt.dataUrl || receipt.url || (typeof receipt === 'string' && receipt.startsWith('data:')))) : []; const photoLinks = photos.length ? `<div class="flex flex-wrap gap-2 mt-2">${photos.map((receipt, index) => {
+    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => { const meta = item.shiftMeta || {}; const opened = meta.openedAt ? new Date(meta.openedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '-'; const closed = meta.closedAt ? new Date(meta.closedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'открыта'; const receipts = Array.isArray(meta.receipts) ? meta.receipts : []; const photos = receipts.filter(receipt => receipt && (receipt.dataUrl || receipt.url || (typeof receipt === 'string' && receipt.startsWith('data:')))); const photoLinks = photos.length ? `<div class="flex flex-wrap gap-2 mt-2">${photos.map((receipt, index) => {
         const dataUrl = typeof receipt === 'string' ? receipt : (receipt.dataUrl || receipt.url);
         const name = typeof receipt === 'string' ? `Чек ${index + 1}` : (receipt.name || `Чек ${index + 1}`);
-        return `<a href="${dataUrl}" target="_blank" title="${escapeHtml(name)}"><img src="${dataUrl}" alt="${escapeHtml(name)}" class="h-16 w-16 object-cover rounded-lg border border-white/10"></a>`;
+        return `<a href="${dataUrl}" target="_blank" title="${escapeHtml(name)}"><img src="${dataUrl}" alt="${escapeHtml(name)}" class="h-12 w-12 object-cover rounded-md border border-white/10"></a>`;
     }).join('')}</div>` : ''; const isShiftEntry = item.source === 'shift_opened' || item.source === 'shift_closed'; const shiftState = item.source === 'shift_opened' ? 'Открыта' : 'Закрыта'; const shiftInfo = isShiftEntry ? `<div class="text-[10px] text-slate-400 mt-1">${shiftState}: ${item.source === 'shift_opened' ? opened : closed}<br>Касса ${Number(meta.cash || 0).toLocaleString()} · Взял ${Number(meta.taken || 0).toLocaleString()} · Остался ${Number(meta.remaining || 0).toLocaleString()}${photoLinks}</div>` : ''; return `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : item.source === 'shift_closed' ? ' · Смена закрыта' : ''}${shiftInfo}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
     renderOwnerReceiptBox();
     const adjustment = getRevenueAdjustment(getLocalDateKey());
@@ -2800,7 +2816,16 @@ async function syncAllData() {
             if (isOwnerOrIT()) renderOwnerPanel();
         }),
         syncChannel(fetch('/api/shift-reports'), serverReports => {
-            localStorage.setItem('shift_history', JSON.stringify(serverReports));
+            const mergedReports = serverReports.map(report => {
+                const dateKey = report.dateKey || report.date || getRevenueDateKey(report);
+                const adminName = report.admin || ADMIN_NAME;
+                const persisted = restorePersistedAdminReceipts(dateKey, adminName);
+                if (Array.isArray(persisted) && persisted.length && (!Array.isArray(report.shiftMeta?.receipts) || !report.shiftMeta.receipts.length)) {
+                    return { ...report, shiftMeta: { ...(report.shiftMeta || {}), receipts: persisted } };
+                }
+                return report;
+            });
+            localStorage.setItem('shift_history', JSON.stringify(mergedReports));
             if (isOwnerOrIT()) renderOwnerPanel();
         }),
         syncChannel(fetch('/api/revenue-adjustments'), adjustments => {
