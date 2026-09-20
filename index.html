@@ -1921,6 +1921,7 @@ async function ensureAdminShiftOpened() {
         const saved = await response.json();
         const updatedHistory = getHistory().map(item => item.timestamp === report.timestamp ? { ...item, id: saved.id, shiftMeta: saved.shiftMeta || report.shiftMeta } : item);
         localStorage.setItem('shift_history', JSON.stringify(updatedHistory));
+        if (isOwnerOrIT()) renderOwnerPanel();
         await syncAllData();
     } catch (error) {
         showSystemToast('Смена открыта локально до восстановления связи');
@@ -2900,6 +2901,11 @@ async function syncAllData() {
 syncAllData();
 setInterval(syncAllData, 2000);
 window.addEventListener('focus', syncAllData);
+window.addEventListener('storage', event => {
+    if (event.key === 'shift_history' && isOwnerOrIT()) {
+        renderOwnerPanel();
+    }
+});
 
 async function startControl(type, id) {
     const key = `${type}-${id}`;
