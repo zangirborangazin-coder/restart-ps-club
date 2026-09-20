@@ -1821,13 +1821,16 @@ function configureAccess() {
     startPresence();
     fetchCashBalance();
     renderLastSettlement();
-    if (getUserRole() === 'admin') {
-        ensureAdminShiftOpened();
-    }
     renderOwnerPanel();
 }
-function initAccess() {
-    if (currentUser) { document.getElementById('login-screen').classList.add('hidden'); configureAccess(); }
+async function initAccess() {
+    if (!currentUser) return;
+    document.getElementById('login-screen').classList.add('hidden');
+    configureAccess();
+    if (getUserRole() === 'admin') {
+        await ensureAdminShiftOpened();
+        await syncAllData();
+    }
 }
 
 // --- 2. ВХОД В СИСТЕМУ ---
@@ -1978,13 +1981,13 @@ async function closeAdminShift() {
     const shiftMeta = { ...(report.shiftMeta || {}), status: 'closed', closedAt, updatedAt: closedAt };
     const closedReport = { ...report, qr, cash, total: qr + cash, source: 'shift_closed', finalCash: Number(shiftMeta.remaining || report.finalCash || 0), details: shiftPayments, shiftMeta };
     if (report.id) {
-        await fetch(`/api/shift-reports/${report.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(closedReport) }).catch(() => null);
+        await fetchWithTimeout(`/api/shift-reports/${report.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(closedReport) }, 2500);
     }
     const history = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? closedReport : item);
     localStorage.setItem('shift_history', JSON.stringify(history));
     if (isOwnerOrIT()) renderOwnerPanel();
-    await syncAllData();
-    await fetch(`/api/payments/date/${report.dateKey}`, { method: 'DELETE' }).catch(() => null);
+    syncAllData().catch(() => {});
+    fetchWithTimeout(`/api/payments/date/${report.dateKey}`, { method: 'DELETE' }, 1500);
     localStorage.removeItem('saved_payments');
     payments = {};
     document.getElementById('qr-input').value = '';
@@ -2001,6 +2004,12 @@ async function closeAdminShift() {
         localStorage.removeItem('restart_user');
         location.reload();
     }, 800);
+}
+function fetchWithTimeout(resource, options = {}, timeout = 2000) {
+    return Promise.race([
+        fetch(resource, options).catch(() => null),
+        new Promise(resolve => setTimeout(() => resolve(null), timeout))
+    ]);
 }
 function getAdminShiftReport() {
     const dateKey = getShiftDateKey();
@@ -2915,11 +2924,12 @@ window.addEventListener('load', () => {
 
 });
 
-window.addEventListener('load', () => {
-    initAccess();
+window.addEventListener('load', async () => {
+    await initAccess();
     const previousCash = document.getElementById('previous-cash');
     if (previousCash) previousCash.value = localStorage.getItem('last_cash_balance') || '0';
     fetchEmployees();
+    await syncAllData();
 });
 
 // --- СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ СЕССИЙ, БРОНЕЙ И ОПЛАТ --- // старый 
@@ -2982,7 +2992,6 @@ async function syncAllData() {
     ]);
 }
 
-syncAllData();
 setInterval(syncAllData, 2000);
 window.addEventListener('focus', syncAllData);
 window.addEventListener('storage', event => {
