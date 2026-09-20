@@ -850,6 +850,13 @@
     </div>
     <div class="stealth-card p-6 mb-8">
         <div class="flex items-center justify-between gap-3 mb-5">
+            <h2 class="font-bold text-lg">Фото QR чеков</h2>
+            <span class="text-xs text-slate-400">Онлайн</span>
+        </div>
+        <div id="owner-receipts-box" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+    </div>
+    <div class="stealth-card p-6 mb-8">
+        <div class="flex items-center justify-between gap-3 mb-5">
             <h2 class="font-bold text-lg">Выдача администраторам</h2>
             <span class="text-xs text-slate-400">7 000 ₸ за смену</span>
         </div>
@@ -1812,6 +1819,13 @@ async function ensureAdminShiftOpened() {
     }
     const meta = report.shiftMeta || {};
     if (!meta.openedAt) meta.openedAt = new Date(report.timestamp || Date.now()).toISOString();
+    const persistedReceipts = restorePersistedAdminReceipts(dateKey, ADMIN_NAME);
+    if (Array.isArray(persistedReceipts) && persistedReceipts.length && (!Array.isArray(meta.receipts) || !meta.receipts.length)) {
+        meta.receipts = persistedReceipts;
+        report.shiftMeta = meta;
+        const refreshedHistory = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? report : item);
+        localStorage.setItem('shift_history', JSON.stringify(refreshedHistory));
+    }
     const cashInput = document.getElementById('admin-shift-cash');
     const takenInput = document.getElementById('admin-shift-taken');
     const remainingInput = document.getElementById('admin-shift-remaining');
@@ -1872,11 +1886,65 @@ function getAdminShiftReport() {
 function parseInputSum(value) {
     return String(value || '').trim().split(/\s+/).reduce((sum, part) => sum + (Number(part) || 0), 0);
 }
+function getAdminReceiptStorageKey(dateKey = getShiftDateKey(), adminName = ADMIN_NAME) {
+    return `admin_receipts_${String(dateKey || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_')}_${String(adminName || 'admin')}`;
+}
+function restorePersistedAdminReceipts(dateKey = getShiftDateKey(), adminName = ADMIN_NAME) {
+    const key = getAdminReceiptStorageKey(dateKey, adminName);
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        return [];
+    }
+}
+function persistAdminReceipts(report, receipts) {
+    if (!report) return;
+    const key = getAdminReceiptStorageKey(report.dateKey || getShiftDateKey(), report.admin || ADMIN_NAME);
+    localStorage.setItem(key, JSON.stringify(Array.isArray(receipts) ? receipts : []));
+}
 function renderAdminReceiptStatus(meta = {}) {
     const status = document.getElementById('admin-receipts-status');
     if (!status) return;
     const count = Array.isArray(meta.receipts) ? meta.receipts.length : 0;
     status.textContent = count ? `Загружено фото чеков: ${count}` : 'Фото чеков не загружены';
+}
+function renderOwnerReceiptBox() {
+    const box = document.getElementById('owner-receipts-box');
+    if (!box) return;
+    const history = getHistory();
+    const photos = history.flatMap(item => {
+        const meta = item.shiftMeta || {};
+        const receipts = Array.isArray(meta.receipts) ? meta.receipts : [];
+        return receipts.filter(receipt => receipt && (receipt.dataUrl || receipt.url || (typeof receipt === 'string' && receipt.startsWith('data:')))).map((receipt, index) => {
+            const dataUrl = typeof receipt === 'string' ? receipt : (receipt.dataUrl || receipt.url);
+            const name = typeof receipt === 'string' ? `Чек ${index + 1}` : (receipt.name || `Чек ${index + 1}`);
+            return {
+                dataUrl,
+                name,
+                admin: item.admin || 'Администратор',
+                date: item.date || (item.dateKey || '').split('-').reverse().join('.'),
+                source: item.source
+            };
+        });
+    });
+    if (!photos.length) {
+        box.innerHTML = '<div class="col-span-full text-sm text-slate-500">Фото чеков пока нет</div>';
+        return;
+    }
+    box.innerHTML = photos.slice().reverse().map((photo, index) => `
+        <div class="border border-white/10 rounded-2xl overflow-hidden bg-slate-900/40">
+            <a href="${photo.dataUrl}" target="_blank" rel="noopener noreferrer" class="block">
+                <img src="${photo.dataUrl}" alt="${escapeHtml(photo.name)}" class="w-full h-28 object-cover">
+            </a>
+            <div class="px-2 py-2 text-[10px] text-slate-400">
+                <div class="font-medium text-slate-200">${escapeHtml(photo.admin)}</div>
+                <div>${escapeHtml(photo.date)}</div>
+            </div>
+        </div>
+    `).join('');
 }
 async function saveAdminShiftMeta(extra = {}) {
     if (!currentUser || getUserRole() !== 'admin') return;
@@ -1891,6 +1959,7 @@ async function saveAdminShiftMeta(extra = {}) {
         ...extra
     };
     report.shiftMeta = shiftMeta;
+    persistAdminReceipts(report, shiftMeta.receipts);
     const history = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? report : item);
     localStorage.setItem('shift_history', JSON.stringify(history));
     if (!report.id) return;
@@ -2294,6 +2363,7 @@ function renderOwnerPanel() {
         const name = typeof receipt === 'string' ? `Чек ${index + 1}` : (receipt.name || `Чек ${index + 1}`);
         return `<a href="${dataUrl}" target="_blank" title="${escapeHtml(name)}"><img src="${dataUrl}" alt="${escapeHtml(name)}" class="h-16 w-16 object-cover rounded-lg border border-white/10"></a>`;
     }).join('')}</div>` : ''; const isShiftEntry = item.source === 'shift_opened' || item.source === 'shift_closed'; const shiftState = item.source === 'shift_opened' ? 'Открыта' : 'Закрыта'; const shiftInfo = isShiftEntry ? `<div class="text-[10px] text-slate-400 mt-1">${shiftState}: ${item.source === 'shift_opened' ? opened : closed}<br>Касса ${Number(meta.cash || 0).toLocaleString()} · Взял ${Number(meta.taken || 0).toLocaleString()} · Остался ${Number(meta.remaining || 0).toLocaleString()}${photoLinks}</div>` : ''; return `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : item.source === 'shift_closed' ? ' · Смена закрыта' : ''}${shiftInfo}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
+    renderOwnerReceiptBox();
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const baseCash = today.reduce((sum, item) => sum + Number(item.cash || 0), 0);
