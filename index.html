@@ -727,6 +727,12 @@
 </nav>
 
 <div id="system-toast"></div>
+<div id="receipt-viewer" class="hidden fixed inset-0 z-[4000] items-center justify-center bg-black/90 p-5" onclick="closeReceiptViewer()">
+    <div class="relative max-w-4xl max-h-full" onclick="event.stopPropagation()">
+        <button type="button" class="btn-secondary absolute -top-3 -right-3 z-10" onclick="closeReceiptViewer()" aria-label="Закрыть фото">Закрыть</button>
+        <img id="receipt-viewer-image" src="" alt="Фото QR-чека" class="max-h-[85vh] max-w-full rounded-xl object-contain">
+    </div>
+</div>
 
 <div id="main-page" class="page active max-w-7xl mx-auto p-10">
     <div class="section-head">
@@ -781,13 +787,14 @@
                 <label class="text-xs text-slate-400">Касса<input id="admin-shift-cash" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
                 <label class="text-xs text-slate-400">Взял<select id="admin-shift-taken" class="mt-2 w-full">
                     <option value="0">0 ₸</option>
-                    <option value="7000">7000 ₸ наличный</option>
-                    <option value="7000">7000 ₸ Kaspi</option>
+                    <option value="cash">7 000 ₸ наличными</option>
+                    <option value="kaspi">7 000 ₸ Kaspi банк</option>
                 </select></label>
                 <label class="text-xs text-slate-400">Остался<input id="admin-shift-remaining" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
                 <button type="button" class="btn-stealth text-xs sm:col-span-3" onclick="saveAdminShiftMeta()">Сохранить кассу</button>
                 <button id="admin-close-shift" type="button" class="btn-secondary text-xs sm:col-span-3" onclick="closeAdminShift()">Закрыть смену</button>
                 <label class="text-xs text-slate-400 sm:col-span-3">Фото QR чеков<input id="admin-receipts-file" type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.heic,.heif,.png" multiple class="mt-2" onchange="saveAdminReceiptPhotos(event)"></label>
+                <button type="button" class="btn-secondary text-xs text-red-300 sm:col-span-3" onclick="clearAdminReceiptPhotos()">Очистить загруженные фото</button>
                 <div id="admin-receipts-progress" class="hidden mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800/60">
                     <div id="admin-receipts-progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 transition-all duration-200"></div>
                 </div>
@@ -897,16 +904,9 @@
     <div class="stealth-card p-6 mb-8">
         <div class="flex items-center justify-between gap-3 mb-5">
             <h2 class="font-bold text-lg">Фото QR чеков</h2>
-            <span class="text-xs text-slate-400">Онлайн</span>
+            <div class="flex items-center gap-3"><span class="text-xs text-slate-400">Онлайн</span><button class="btn-secondary text-xs text-red-300" type="button" onclick="clearOwnerReceiptPhotos()">Очистить фото</button></div>
         </div>
         <div id="owner-receipts-box" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
-    </div>
-    <div class="stealth-card p-6 mb-8">
-        <div class="flex items-center justify-between gap-3 mb-5">
-            <h2 class="font-bold text-lg">Выдача администраторам</h2>
-            <span class="text-xs text-slate-400">7 000 ₸ за смену</span>
-        </div>
-        <div id="cash-withdrawals-body" class="space-y-2"></div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div class="stealth-card p-6">
@@ -1944,8 +1944,7 @@ async function ensureAdminShiftOpened() {
     const remainingInput = document.getElementById('admin-shift-remaining');
     if (cashInput) cashInput.value = meta.cash ?? report.previousCash;
     if (takenInput) {
-        const selectedTake = Number(meta.taken ?? 0);
-        takenInput.value = selectedTake === 7000 ? '7000' : (selectedTake || 0);
+        takenInput.value = meta.takenMethod || (Number(meta.taken || 0) === 7000 ? 'cash' : '0');
     }
     if (remainingInput) remainingInput.value = meta.remaining ?? report.finalCash;
     renderAdminReceiptStatus(meta);
@@ -2099,7 +2098,7 @@ function renderOwnerReceiptBox() {
     }
     box.innerHTML = photos.slice().reverse().map((photo, index) => `
         <div class="border border-white/10 rounded-2xl overflow-hidden bg-slate-900/40">
-            <a href="${photo.dataUrl}" target="_blank" rel="noopener noreferrer" class="block">
+            <a href="#" onclick="openReceiptViewer('${photo.dataUrl}'); return false" class="block">
                 <img src="${photo.dataUrl}" alt="${escapeHtml(photo.name)}" class="w-full h-28 object-cover">
             </a>
             <div class="px-2 py-2 text-[10px] text-slate-400">
@@ -2108,6 +2107,45 @@ function renderOwnerReceiptBox() {
             </div>
         </div>
     `).join('');
+}
+function openReceiptViewer(dataUrl) {
+    const viewer = document.getElementById('receipt-viewer');
+    const image = document.getElementById('receipt-viewer-image');
+    if (!viewer || !image || !dataUrl) return;
+    image.src = dataUrl;
+    viewer.classList.remove('hidden');
+    viewer.classList.add('flex');
+}
+function closeReceiptViewer() {
+    const viewer = document.getElementById('receipt-viewer');
+    const image = document.getElementById('receipt-viewer-image');
+    if (image) image.src = '';
+    viewer?.classList.add('hidden');
+    viewer?.classList.remove('flex');
+}
+async function clearOwnerReceiptPhotos() {
+    if (!isOwnerOrIT()) return showSystemToast('Очищать фото может только владелец или IT');
+    if (!confirm('Удалить все фото QR-чеков у всех смен?')) return;
+    const history = getHistory();
+    const requests = [];
+    const clearedHistory = history.map(report => {
+        const shiftMeta = { ...(report.shiftMeta || {}), receipts: [] };
+        if (report.id) {
+            requests.push(fetchWithTimeout(`/api/shift-reports/${report.id}/meta`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shiftMeta })
+            }, 2500));
+        }
+        if (report.dateKey || report.admin) {
+            localStorage.removeItem(getAdminReceiptStorageKey(report.dateKey || getRevenueDateKey(report), report.admin || 'admin'));
+        }
+        return { ...report, shiftMeta };
+    });
+    localStorage.setItem('shift_history', JSON.stringify(clearedHistory));
+    await Promise.all(requests);
+    renderOwnerPanel();
+    showSystemToast('Фото QR-чеков очищены');
 }
 async function saveAdminShiftMeta(extra = {}) {
     if (!currentUser || getUserRole() !== 'admin') return;
@@ -2118,10 +2156,12 @@ async function saveAdminShiftMeta(extra = {}) {
     }
     if (!report) return;
     const previous = report.shiftMeta || {};
+    const takenMethod = document.getElementById('admin-shift-taken')?.value || '0';
     const shiftMeta = {
         ...previous,
         cash: Number(document.getElementById('admin-shift-cash')?.value) || 0,
-        taken: Number(document.getElementById('admin-shift-taken')?.value) || 0,
+        taken: takenMethod === 'cash' || takenMethod === 'kaspi' ? 7000 : 0,
+        takenMethod,
         remaining: Number(document.getElementById('admin-shift-remaining')?.value) || 0,
         ...extra
     };
@@ -2189,8 +2229,29 @@ async function saveAdminReceiptPhotos(event) {
     await saveAdminShiftMeta({ receipts: mergedReceipts });
     renderAdminReceiptStatus({ receipts: mergedReceipts });
     renderOwnerPanel();
-    finalizeAdminReceiptProgress(`Фото отправлено владельцу: ${mergedReceipts.length}`);
+    finalizeAdminReceiptProgress(`Фото успешно загружено и отправлено владельцу: ${mergedReceipts.length}`);
+    showSystemToast('Фото успешно загружено и отправлено владельцу');
     if (event.target) event.target.value = '';
+}
+async function clearAdminReceiptPhotos() {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const report = getAdminShiftReport();
+    if (!report) return showSystemToast('Открытая смена не найдена');
+    if (!confirm('Удалить все фото QR-чеков текущей смены?')) return;
+    const shiftMeta = { ...(report.shiftMeta || {}), receipts: [] };
+    persistAdminReceipts(report, []);
+    const history = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? { ...item, shiftMeta } : item);
+    localStorage.setItem('shift_history', JSON.stringify(history));
+    if (report.id) {
+        await fetchWithTimeout(`/api/shift-reports/${report.id}/meta`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shiftMeta })
+        }, 2500);
+    }
+    renderAdminReceiptStatus({ receipts: [] });
+    renderOwnerPanel();
+    showSystemToast('Фото текущей смены очищены');
 }
 async function fetchCashBalance() {
     try {
@@ -2585,11 +2646,17 @@ function renderOwnerPanel() {
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
     const canEditFinancials = ['owner', 'it'].includes(getUserRole());
+    const formatTakenLabel = meta => meta.takenMethod === 'kaspi' ? 'Взял 7 000 ₸ Kaspi банк' : meta.takenMethod === 'cash' || Number(meta.taken || 0) === 7000 ? 'Взял 7 000 ₸ наличными' : 'Взял 0 ₸';
     document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => { const meta = item.shiftMeta || {}; const opened = meta.openedAt ? new Date(meta.openedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '-'; const closed = meta.closedAt ? new Date(meta.closedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'открыта'; const receipts = Array.isArray(meta.receipts) ? meta.receipts : []; const photos = receipts.filter(receipt => receipt && (receipt.dataUrl || receipt.url || (typeof receipt === 'string' && receipt.startsWith('data:')))); const photoLinks = photos.length ? `<div class="flex flex-wrap gap-2 mt-2">${photos.map((receipt, index) => {
         const dataUrl = typeof receipt === 'string' ? receipt : (receipt.dataUrl || receipt.url);
         const name = typeof receipt === 'string' ? `Чек ${index + 1}` : (receipt.name || `Чек ${index + 1}`);
-        return `<a href="${dataUrl}" target="_blank" title="${escapeHtml(name)}"><img src="${dataUrl}" alt="${escapeHtml(name)}" class="h-12 w-12 object-cover rounded-md border border-white/10"></a>`;
+        return `<a href="#" onclick="openReceiptViewer('${dataUrl}'); return false" title="${escapeHtml(name)}"><img src="${dataUrl}" alt="${escapeHtml(name)}" class="h-12 w-12 object-cover rounded-md border border-white/10"></a>`;
     }).join('')}</div>` : ''; const isShiftEntry = item.source === 'shift_opened' || item.source === 'shift_closed'; const shiftState = item.source === 'shift_opened' ? 'Открыта' : 'Закрыта'; const shiftInfo = isShiftEntry ? `<div class="text-[10px] text-slate-400 mt-1">${shiftState}: ${item.source === 'shift_opened' ? opened : closed}<br>Касса ${Number(meta.cash || 0).toLocaleString()} · Взял ${Number(meta.taken || 0).toLocaleString()} · Остался ${Number(meta.remaining || 0).toLocaleString()}${photoLinks}</div>` : ''; return `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : item.source === 'shift_closed' ? ' · Смена закрыта' : ''}${shiftInfo}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
+    document.querySelectorAll('#history-body tr').forEach((row, index) => {
+        const item = history.slice().reverse()[index];
+        const detail = row.querySelector('td:nth-child(2) div');
+        if (item && detail) detail.innerHTML = detail.innerHTML.replace(/ · Взял [^<]+ · Остался/, ` · ${formatTakenLabel(item.shiftMeta || {})} · Остался`);
+    });
     renderOwnerReceiptBox();
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
@@ -2597,12 +2664,6 @@ function renderOwnerPanel() {
     const todayRows = adjustment ? today.concat([{ time: '-', zone: 'Корректировка владельца', qr: adjustment.qr - baseQr, cash: adjustment.cash - baseCash, total: adjustment.qr + adjustment.cash - baseQr - baseCash }]) : today;
     document.getElementById('payments-today-body').innerHTML = todayRows.slice().reverse().map(item => `<tr><td>${item.time || '-'}</td><td>${item.zone}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${Number(item.total || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.id ? `<button class="text-blue-400" title="Изменить" onclick="editPayment(${item.id})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="text-slate-500">Оплат сегодня пока нет</td></tr>';
     document.getElementById('payments-today-total').innerText = `Сегодня: ${(todayTotals.qr + todayTotals.cash).toLocaleString()} ₸`;
-    const withdrawals = history.filter(item => item.source === 'cash' || item.source === 'kaspi');
-    document.getElementById('cash-withdrawals-body').innerHTML = withdrawals.slice().reverse().map(item => {
-        const date = item.date || (getRevenueDateKey(item) || '').split('-').reverse().join('.');
-        const method = item.source === 'cash' ? 'Наличными' : 'Kaspi банк';
-        return `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/10 pb-3 text-sm"><div><strong>${escapeHtml(date)}</strong><span class="text-slate-400 ml-2">${escapeHtml(item.admin || 'Администратор')}</span></div><strong class="text-cyan-300">7 000 ₸ · ${method}</strong></div>`;
-    }).join('') || '<div class="text-sm text-slate-500">Выдач пока нет</div>';
     const canViewCredentials = ['owner', 'it'].includes(getUserRole());
     const visibleEmployees = currentUser.role === 'owner' ? employees().filter(item => item.role !== 'it') : employees();
     document.getElementById('employees-head').innerHTML = canViewCredentials ? '<tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Действие</th></tr>' : '<tr><th>Имя</th><th>Роль</th><th>Действие</th></tr>';
