@@ -2078,22 +2078,27 @@ function renderOwnerPanel() {
     const todayDate = new Date();
     const weekStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - ((todayDate.getDay() + 6) % 7));
     const monthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-    const sumCalendarRevenue = (startDate, endDate) => {
+    const sumCalendarRevenue = (startDate, endDate, dailySalary = 0) => {
         let total = 0;
         for (const date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
             const dateKey = getLocalDateKey(date);
             const totals = getRevenueTotals(dateKey);
-            total += totals.qr + totals.cash;
+            const dailyRevenue = totals.qr + totals.cash;
+            if (dailyRevenue <= 0) continue;
+            const shiftReports = getHistory().filter(report => getRevenueDateKey(report) === dateKey);
+            const activeShiftRevenue = Object.values(payments).some(payment => getRevenueDateKey(payment) === dateKey);
+            const shiftCount = Math.max(1, shiftReports.length + (activeShiftRevenue ? 1 : 0));
+            total += Math.max(0, dailyRevenue - dailySalary * shiftCount);
         }
         return total;
     };
     const weekTotal = sumCalendarRevenue(weekStart, todayDate);
-    const monthTotal = sumCalendarRevenue(monthStart, todayDate);
+    const monthTotal = sumCalendarRevenue(monthStart, todayDate, 7000);
     document.getElementById('owner-name-chip').innerText = `${currentUser.name} · ${currentUser.role}`;
     const todayTotals = getRevenueTotals(getLocalDateKey());
     document.getElementById('owner-today').innerText = (todayTotals.qr + todayTotals.cash).toLocaleString() + ' ₸';
     document.getElementById('owner-week').innerText = weekTotal.toLocaleString() + ' ₸';
-    document.getElementById('owner-month').innerText = Math.max(0, monthTotal - 7000).toLocaleString() + ' ₸';
+    document.getElementById('owner-month').innerText = monthTotal.toLocaleString() + ' ₸';
     const expenses = getExpenses();
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
