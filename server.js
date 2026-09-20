@@ -88,10 +88,12 @@ async function initializeDatabase() {
 			id INTEGER NOT NULL,
 			start_time INTEGER NOT NULL,
 			end_time INTEGER,
+			shift_date_key TEXT,
 			is_open BOOLEAN NOT NULL DEFAULT FALSE,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`);
+	await pool.query('ALTER TABLE runs ADD COLUMN IF NOT EXISTS shift_date_key TEXT');
 	await pool.query(`
 		CREATE TABLE IF NOT EXISTS bookings (
 			id BIGINT PRIMARY KEY,
@@ -349,7 +351,7 @@ app.delete('/api/revenue-adjustments/:dateKey', async (req, res) => {
 app.get('/api/runs', async (_req, res) => {
 	if (!databaseAvailable) return res.json(memoryRuns);
 	try {
-		const { rows } = await pool.query('SELECT key, type, id, start_time, end_time, is_open FROM runs ORDER BY key');
+		const { rows } = await pool.query('SELECT key, type, id, start_time, end_time, shift_date_key, is_open FROM runs ORDER BY key');
 		res.json(rows);
 	} catch (error) {
 		console.error('GET /api/runs:', error);
@@ -358,15 +360,15 @@ app.get('/api/runs', async (_req, res) => {
 });
 
 app.post('/api/runs', async (req, res) => {
-	const { key, type, id, startTime, endTime, isOpen } = req.body || {};
+	const { key, type, id, startTime, endTime, isOpen, shiftDateKey } = req.body || {};
 	if (!key || !type || !Number.isInteger(Number(id)) || !Number.isFinite(Number(startTime))) return res.status(400).json({ error: 'Некорректная сессия' });
-	const run = { key, type, id: Number(id), start_time: Number(startTime), end_time: endTime === null ? null : Number(endTime), is_open: Boolean(isOpen) };
+	const run = { key, type, id: Number(id), start_time: Number(startTime), end_time: endTime === null ? null : Number(endTime), shift_date_key: shiftDateKey || null, is_open: Boolean(isOpen) };
 	if (!databaseAvailable) {
 		memoryRuns = memoryRuns.filter(item => item.key !== key).concat(run);
 		return res.status(201).json(run);
 	}
 	try {
-		const { rows } = await pool.query(`INSERT INTO runs (key, type, id, start_time, end_time, is_open) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (key) DO UPDATE SET type=$2,id=$3,start_time=$4,end_time=$5,is_open=$6,updated_at=NOW() RETURNING key,type,id,start_time,end_time,is_open`, [run.key, run.type, run.id, run.start_time, run.end_time, run.is_open]);
+		const { rows } = await pool.query(`INSERT INTO runs (key, type, id, start_time, end_time, shift_date_key, is_open) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (key) DO UPDATE SET type=$2,id=$3,start_time=$4,end_time=$5,shift_date_key=$6,is_open=$7,updated_at=NOW() RETURNING key,type,id,start_time,end_time,shift_date_key,is_open`, [run.key, run.type, run.id, run.start_time, run.end_time, run.shift_date_key, run.is_open]);
 		res.status(201).json(rows[0]);
 	} catch (error) { console.error('POST /api/runs:', error); res.status(500).json({ error: 'Не удалось сохранить сессию' }); }
 });
@@ -512,6 +514,60 @@ app.delete('/api/payments/date/:dateKey', async (req, res) => {
 		console.error('DELETE /api/payments/date:', error);
 		res.status(500).json({ error: 'Не удалось очистить оплаты' });
 	}
+});
+
+app.get('/api/revenue-backup', async (_req, res) => {
+	if (!databaseAvailable) return res.json({ payments: memoryPayments, shiftReports: memoryShiftReports, revenueAdjustments: memoryRevenueAdjustments, cashBalance: memoryCashBalance });
+	try {
+		const [paymentsResult, reportsResult, adjustmentsResult, cashResult] = await Promise.all([
+			pool.query('SELECT id,cash,qr,timestamp,date_key AS "dateKey",time,start_str AS "startStr",end_str AS "endStr",total,duration,zone FROM payments ORDER BY timestamp'),
+			pool.query('SELECT id,date_key AS "dateKey",report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details FROM shift_reports ORDER BY timestamp'),
+			pool.query('SELECT date_key AS "dateKey",qr,cash,changed_by AS "changedBy",changed_at AS "changedAt" FROM revenue_adjustments'),
+			pool.query('SELECT amount,denominations,user_name AS user,date_key AS "dateKey",updated_at AS "updatedAt" FROM cash_balance WHERE id = 1')
+		]);
+		res.json({ payments: paymentsResult.rows, shiftReports: reportsResult.rows, revenueAdjustments: Object.fromEntries(adjustmentsResult.rows.map(row => [row.dateKey, row])), cashBalance: cashResult.rows[0] || null });
+	} catch (error) { console.error('GET /api/revenue-backup:', error); res.status(500).json({ error: 'Не удалось создать резервную копию выручки' }); }
+});
+
+app.post('/api/revenue-backup', async (req, res) => {
+	const backup = req.body || {};
+	if (!Array.isArray(backup.payments) || !Array.isArray(backup.shiftReports) || !backup.revenueAdjustments || typeof backup.revenueAdjustments !== 'object') {
+		return res.status(400).json({ error: 'Некорректная резервная копия выручки' });
+	}
+	if (!databaseAvailable) {
+		memoryPayments = backup.payments;
+		memoryShiftReports = backup.shiftReports;
+		memoryRevenueAdjustments = backup.revenueAdjustments;
+		memoryCashBalance = backup.cashBalance || null;
+		return res.json({ ok: true });
+	}
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('DELETE FROM payments');
+		await client.query('DELETE FROM shift_reports');
+		await client.query('DELETE FROM revenue_adjustments');
+		await client.query('DELETE FROM cash_balance');
+		for (const payment of backup.payments) {
+			await client.query(`INSERT INTO payments (id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [payment.id, Number(payment.cash) || 0, Number(payment.qr) || 0, payment.timestamp || Date.now(), payment.dateKey || payment.date_key, payment.time || '', payment.startStr || payment.start_str || '', payment.endStr || payment.end_str || '', Number(payment.total) || 0, payment.duration || '', payment.zone || '']);
+		}
+		for (const report of backup.shiftReports) {
+			await client.query(`INSERT INTO shift_reports (id,date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [report.id, report.dateKey || report.date_key, report.date || report.dateKey, report.timestamp || Date.now(), report.admin || '', Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || [])]);
+		}
+		for (const [dateKey, adjustment] of Object.entries(backup.revenueAdjustments)) {
+			await client.query('INSERT INTO revenue_adjustments (date_key,qr,cash,changed_by) VALUES ($1,$2,$3,$4)', [dateKey, Number(adjustment.qr) || 0, Number(adjustment.cash) || 0, adjustment.changedBy || 'backup']);
+		}
+		if (backup.cashBalance) {
+			const balance = backup.cashBalance;
+			await client.query('INSERT INTO cash_balance (id,amount,denominations,user_name,date_key) VALUES (1,$1,$2,$3,$4)', [Number(balance.amount) || 0, JSON.stringify(balance.denominations || {}), balance.user || '', balance.dateKey || '']);
+		}
+		await client.query('COMMIT');
+		res.json({ ok: true });
+	} catch (error) {
+		await client.query('ROLLBACK');
+		console.error('POST /api/revenue-backup:', error);
+		res.status(500).json({ error: 'Не удалось восстановить резервную копию выручки' });
+	} finally { client.release(); }
 });
 
 initializeDatabase()
