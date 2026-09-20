@@ -737,7 +737,11 @@
                 <div class="text-[10px] uppercase font-bold text-blue-500 mb-2">Общая выручка</div>
                 <div id="grand-total" class="text-4xl font-black font-mono text-white">0 ₸</div>
             </div>
-            <button id="cash-report-btn" class="btn-stealth w-full mt-5" type="button" onclick="generateReport()">Сдать отчёт</button>
+            <div id="admin-shift-fields" class="hidden mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label class="text-xs text-slate-400">Касса<input id="admin-shift-cash" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
+                <label class="text-xs text-slate-400">Взял<input id="admin-shift-taken" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
+                <label class="text-xs text-slate-400">Остался<input id="admin-shift-remaining" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
+            </div>
         </div>
         <div id="last-shift-result" class="hidden w-full h-full">
             <div class="stealth-card p-6 border border-cyan-400/20 h-full">
@@ -870,7 +874,6 @@
     <div class="stealth-card p-7">
         <h2 class="text-xl font-bold mb-2">Сдача смены</h2>
         <p class="text-sm text-slate-400 mb-6">После сдачи владелец увидит каждую оплату по VIP, QR, наличные и итог за сегодня.</p>
-        <button id="admin-report-btn" onclick="generateReport()" class="btn-stealth">Сдать смену</button>
     </div>
 </div>
 
@@ -1718,8 +1721,8 @@ function configureAccess() {
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
     if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
-    const reportButton = document.getElementById('cash-report-btn');
-    if (reportButton) reportButton.classList.toggle('hidden', getUserRole() !== 'admin');
+    const adminShiftFields = document.getElementById('admin-shift-fields');
+    if (adminShiftFields) adminShiftFields.classList.toggle('hidden', getUserRole() !== 'admin');
     const profileButton = document.getElementById('nav-profile-btn');
     if (profileButton) profileButton.classList.toggle('hidden', getUserRole() !== 'admin');
     const profileCard = document.getElementById('admin-profile-card');
@@ -1738,6 +1741,7 @@ function configureAccess() {
     fetchCashBalance();
     renderLastSettlement();
     renderOwnerPanel();
+    if (getUserRole() === 'admin') ensureAdminShiftOpened();
 }
 function initAccess() {
     if (currentUser) { document.getElementById('login-screen').classList.add('hidden'); configureAccess(); }
@@ -1748,6 +1752,39 @@ function initAccess() {
 function getHistory() { return JSON.parse(localStorage.getItem('shift_history') || '[]'); }
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
 let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
+async function ensureAdminShiftOpened() {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const dateKey = getShiftDateKey();
+    const history = getHistory();
+    const alreadyOpened = history.some(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
+    if (alreadyOpened) return;
+    const report = {
+        date: dateKey.split('-').reverse().join('.'),
+        dateKey,
+        timestamp: Date.now(),
+        admin: ADMIN_NAME,
+        qr: 0,
+        cash: 0,
+        previousCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
+        source: 'shift_opened',
+        finalCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
+        total: 0,
+        details: []
+    };
+    history.push(report);
+    localStorage.setItem('shift_history', JSON.stringify(history));
+    const cashInput = document.getElementById('admin-shift-cash');
+    const remainingInput = document.getElementById('admin-shift-remaining');
+    if (cashInput) cashInput.value = report.previousCash;
+    if (remainingInput) remainingInput.value = report.finalCash;
+    try {
+        const response = await fetch('/api/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
+        if (!response.ok) throw new Error('shift');
+        await syncAllData();
+    } catch (error) {
+        showSystemToast('Смена открыта локально до восстановления связи');
+    }
+}
 async function fetchCashBalance() {
     try {
         const response = await fetch('/api/cash-balance');
@@ -2112,7 +2149,7 @@ function renderOwnerPanel() {
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
     const canEditFinancials = ['owner', 'it'].includes(getUserRole());
-    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
+    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : ''}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const baseCash = today.reduce((sum, item) => sum + Number(item.cash || 0), 0);
