@@ -451,15 +451,39 @@ app.get('/api/presence', async (_req, res) => {
 	}
 });
 
+app.get('/api/presence/check', async (req, res) => {
+	const login = String(req.query.login || '').trim();
+	const sessionId = String(req.query.sessionId || '').trim();
+	if (!login || !sessionId) return res.status(400).json({ error: 'Некорректная проверка входа' });
+	if (!databaseAvailable) {
+		const activeSince = Date.now() - 20000;
+		memoryPresence = memoryPresence.filter(user => user.last_seen > activeSince);
+		const active = memoryPresence.find(user => user.login === login && user.session_id !== sessionId);
+		return res.json({ available: !active, activeUser: active ? { name: active.name, role: active.role } : null });
+	}
+	try {
+		const { rows } = await pool.query(`SELECT name, role FROM online_presence WHERE login = $1 AND session_id <> $2 AND last_seen > NOW() - INTERVAL '20 seconds' LIMIT 1`, [login, sessionId]);
+		res.json({ available: !rows[0], activeUser: rows[0] || null });
+	} catch (error) {
+		console.error('GET /api/presence/check:', error);
+		res.status(500).json({ error: 'Не удалось проверить активный вход' });
+	}
+});
+
 app.post('/api/presence', async (req, res) => {
 	const { sessionId, name, login, role } = req.body || {};
 	if (!sessionId || !name || !login || !role) return res.status(400).json({ error: 'Некорректный онлайн-статус' });
 	if (!databaseAvailable) {
+		const activeSince = Date.now() - 20000;
+		memoryPresence = memoryPresence.filter(user => user.last_seen > activeSince);
+		if (memoryPresence.some(user => user.login === login && user.session_id !== sessionId)) return res.status(409).json({ error: 'Аккаунт уже используется на другом устройстве или во вкладке' });
 		const user = { session_id: sessionId, name, login, role, last_seen: Date.now() };
 		memoryPresence = memoryPresence.filter(item => item.session_id !== sessionId).concat(user);
 		return res.status(204).end();
 	}
 	try {
+		const active = await pool.query(`SELECT 1 FROM online_presence WHERE login = $1 AND session_id <> $2 AND last_seen > NOW() - INTERVAL '20 seconds' LIMIT 1`, [login, sessionId]);
+		if (active.rows[0]) return res.status(409).json({ error: 'Аккаунт уже используется на другом устройстве или во вкладке' });
 		await pool.query(`INSERT INTO online_presence (session_id, name, login, role, last_seen) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (session_id) DO UPDATE SET name=$2,login=$3,role=$4,last_seen=NOW()`, [sessionId, name, login, role]);
 		res.status(204).end();
 	} catch (error) {
