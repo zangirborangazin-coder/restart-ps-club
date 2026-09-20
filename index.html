@@ -2075,14 +2075,25 @@ function renderOwnerPanel() {
     if (!isOwnerOrIT()) return;
     const history = getHistory();
     const today = getRevenueForDate(getLocalDateKey());
-    const now = Date.now();
-    const day = 24 * 60 * 60 * 1000;
-    const total = list => list.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const todayDate = new Date();
+    const weekStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - ((todayDate.getDay() + 6) % 7));
+    const monthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    const sumCalendarRevenue = (startDate, endDate) => {
+        let total = 0;
+        for (const date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+            const dateKey = getLocalDateKey(date);
+            const totals = getRevenueTotals(dateKey);
+            total += totals.qr + totals.cash;
+        }
+        return total;
+    };
+    const weekTotal = sumCalendarRevenue(weekStart, todayDate);
+    const monthTotal = sumCalendarRevenue(monthStart, todayDate);
     document.getElementById('owner-name-chip').innerText = `${currentUser.name} · ${currentUser.role}`;
     const todayTotals = getRevenueTotals(getLocalDateKey());
     document.getElementById('owner-today').innerText = (todayTotals.qr + todayTotals.cash).toLocaleString() + ' ₸';
-    document.getElementById('owner-week').innerText = total(history.filter(item => now - item.timestamp < 7 * day)).toLocaleString() + ' ₸';
-    document.getElementById('owner-month').innerText = total(history.filter(item => now - item.timestamp < 31 * day)).toLocaleString() + ' ₸';
+    document.getElementById('owner-week').innerText = weekTotal.toLocaleString() + ' ₸';
+    document.getElementById('owner-month').innerText = monthTotal.toLocaleString() + ' ₸';
     const expenses = getExpenses();
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
