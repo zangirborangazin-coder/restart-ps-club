@@ -833,58 +833,68 @@
         .online-status-panel {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            min-width: 190px;
-            padding: 10px 12px;
-            border-radius: 14px;
-            background: rgba(8, 13, 22, 0.78);
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+            gap: 2px;
+            min-width: 0;
+            padding: 0;
+            border-radius: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            margin-left: 6px;
+            line-height: 1.2;
         }
         .presence-book-title {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            color: #dfeaf7;
+            gap: 8px;
+            color: #86efac;
             font-size: 10px;
             font-weight: 800;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            padding-bottom: 6px;
-            border-bottom: 1px solid rgba(148,163,184,0.12);
+            padding: 0;
+            border: none;
+            animation: onlinePulse 1.8s ease-in-out infinite;
         }
         .presence-book-count {
-            color: #d1fae5;
-            background: rgba(34, 197, 94, 0.12);
-            border: 1px solid rgba(34, 197, 94, 0.2);
-            border-radius: 999px;
-            padding: 2px 7px;
-            font-size: 9px;
+            color: #bbf7d0;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            font-size: 10px;
             font-weight: 700;
         }
-        .presence-book-list { display: grid; gap: 4px; }
+        .presence-book-list {
+            display: grid;
+            gap: 2px;
+        }
         .presence-book-row {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 8px;
-            padding: 5px 6px;
-            border-radius: 6px;
-            color: #d8e2ea;
             font-size: 10px;
-            background: rgba(148,191,224,0.045);
-            border: 1px solid rgba(148,191,224,0.06);
+            line-height: 1.2;
+            color: #86efac;
+            letter-spacing: 0.04em;
+            min-height: 14px;
+            padding: 0;
+            border: none;
+            animation: onlinePulse 1.8s ease-in-out infinite;
         }
-        .presence-book-row::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            flex: 0 0 auto;
-            border-radius: 50%;
-            background: #8ed7b5;
-            box-shadow: 0 0 7px rgba(142,215,181,0.55);
+        .presence-book-role {
+            color: #bbf7d0;
+            opacity: 0.85;
+            font-size: 9px;
+            text-transform: lowercase;
         }
-        .presence-book-role { color: #91a7b8; margin-left: auto; font-size: 8px; }
+
+        @keyframes onlinePulse {
+            0%, 100% { opacity: 0.75; text-shadow: 0 0 4px rgba(134, 239, 172, 0.2); }
+            50% { opacity: 1; text-shadow: 0 0 10px rgba(134, 239, 172, 0.65); }
+        }
 
         .page { padding-top: clamp(2rem, 4vw, 4.8rem) !important; }
         .section-head { position: relative; }
@@ -2116,7 +2126,7 @@ function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
     if (!element || !currentUser) return;
     const visibleUsers = users.length ? users : [{ name: currentUser.name, role: getUserRole() }];
-    element.innerHTML = `<div class="presence-book-title"><span>Онлайн</span><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
+    element.innerHTML = `<div class="presence-book-title"><span>Онлайн:</span><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
     element.title = visibleUsers.map(user => `${user.name} (${user.role})`).join('\n');
     element.classList.remove('hidden');
 }
