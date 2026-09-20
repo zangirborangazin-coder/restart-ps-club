@@ -2093,7 +2093,7 @@ function renderOwnerPanel() {
     const todayTotals = getRevenueTotals(getLocalDateKey());
     document.getElementById('owner-today').innerText = (todayTotals.qr + todayTotals.cash).toLocaleString() + ' ₸';
     document.getElementById('owner-week').innerText = weekTotal.toLocaleString() + ' ₸';
-    document.getElementById('owner-month').innerText = monthTotal.toLocaleString() + ' ₸';
+    document.getElementById('owner-month').innerText = Math.max(0, monthTotal - 7000).toLocaleString() + ' ₸';
     const expenses = getExpenses();
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
