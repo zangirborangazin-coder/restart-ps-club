@@ -725,34 +725,36 @@
 
         .presence-link {
             display: block !important;
-            width: min(270px, 30vw);
-            min-width: 210px;
-            padding: 9px 12px !important;
-            line-height: 1.25 !important;
+            width: min(240px, 28vw);
+            min-width: 195px;
+            padding: 8px 10px !important;
+            line-height: 1.2 !important;
             white-space: normal;
             text-align: left;
-            background: rgba(9, 20, 32, 0.92) !important;
-            border-color: rgba(114,230,176,0.22) !important;
+            background: rgba(13, 21, 35, 0.72) !important;
+            border-color: rgba(148,191,224,0.16) !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
         }
         .presence-book-title {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            color: #b9f7d7;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.12em;
+            color: #b7c8d7;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
-            padding-bottom: 7px;
-            margin-bottom: 6px;
-            border-bottom: 1px solid rgba(114,230,176,0.16);
+            padding: 0 1px 6px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(148,191,224,0.12);
         }
         .presence-book-count {
-            color: #07120f;
-            background: #9af3c5;
+            color: #cce9f3;
+            background: rgba(85,214,255,0.12);
+            border: 1px solid rgba(85,214,255,0.2);
             border-radius: 999px;
-            padding: 2px 7px;
+            padding: 2px 6px;
             font-size: 9px;
         }
         .presence-book-list { display: grid; gap: 4px; }
@@ -760,11 +762,12 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 4px 5px;
-            border-radius: 7px;
-            color: #dceee7;
-            font-size: 11px;
-            background: rgba(114,230,176,0.045);
+            padding: 5px 6px;
+            border-radius: 6px;
+            color: #d8e2ea;
+            font-size: 10px;
+            background: rgba(148,191,224,0.045);
+            border: 1px solid rgba(148,191,224,0.06);
         }
         .presence-book-row::before {
             content: '';
@@ -772,10 +775,10 @@
             height: 6px;
             flex: 0 0 auto;
             border-radius: 50%;
-            background: #72e6b0;
-            box-shadow: 0 0 8px rgba(114,230,176,0.7);
+            background: #8ed7b5;
+            box-shadow: 0 0 7px rgba(142,215,181,0.55);
         }
-        .presence-book-role { color: #8fa8bf; margin-left: auto; font-size: 9px; }
+        .presence-book-role { color: #91a7b8; margin-left: auto; font-size: 8px; }
 
         .page { padding-top: clamp(2rem, 4vw, 4.8rem) !important; }
         .section-head { position: relative; }
@@ -1990,8 +1993,18 @@ window.addEventListener('load', () => {
 });
 function logout() { localStorage.removeItem('restart_user'); location.reload(); }
 let presenceInterval = null;
+let adminControlReminderInterval = null;
 const presenceSessionId = sessionStorage.getItem('presence_session_id') || crypto.randomUUID();
 sessionStorage.setItem('presence_session_id', presenceSessionId);
+
+function startAdminControlReminder() {
+    clearInterval(adminControlReminderInterval);
+    adminControlReminderInterval = null;
+    if (!currentUser || getUserRole() !== 'admin') return;
+    adminControlReminderInterval = setInterval(() => {
+        showSystemToast('Сайт находится под контролем владельцев. В клубе ведётся видеонаблюдение.');
+    }, 180000);
+}
 
 function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
@@ -2072,6 +2085,7 @@ function configureAccess() {
         input.disabled = getUserRole() === 'admin' && protectedFinanceField;
     });
     startPresence();
+    startAdminControlReminder();
     fetchCashBalance();
     renderLastSettlement();
     renderOwnerPanel();
