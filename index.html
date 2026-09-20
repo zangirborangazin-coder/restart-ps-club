@@ -120,38 +120,6 @@
             border-color: rgba(34, 197, 94, 0.18);
         }
 
-        #nav-online-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            color: #1f2937;
-            background: rgba(16, 185, 129, 0.08);
-            border: 1px solid rgba(16, 185, 129, 0.18);
-        }
-
-        #nav-online-btn::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #22c55e;
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.9);
-            display: inline-block;
-        }
-
-        #nav-online-btn.active {
-            color: #ffffff;
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            border-color: rgba(34, 197, 94, 0.4);
-            box-shadow: 0 10px 24px rgba(34, 197, 94, 0.2);
-        }
-
-        #nav-online-btn.active::before {
-            background: #dcfce7;
-            box-shadow: 0 0 10px rgba(220, 252, 231, 0.9);
-        }
-
         .timer-minimal {
             font-family: 'JetBrains Mono', monospace;
             font-size: 2.45rem;
@@ -862,45 +830,38 @@
             box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
         }
         .nav-group-left { position: relative; }
-        .online-nav-popover {
-            position: absolute;
-            top: 54px;
-            left: 0;
-            z-index: 1200;
+        .online-status-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 190px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(8, 13, 22, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
         }
-        .online-nav-popover.hidden { display: none; }
         .presence-book-title {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            color: #b7c8d7;
+            gap: 10px;
+            color: #dfeaf7;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(148,163,184,0.12);
+        }
+        .presence-book-count {
+            color: #d1fae5;
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 999px;
+            padding: 2px 7px;
             font-size: 9px;
             font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            padding: 0 1px 6px;
-            margin-bottom: 5px;
-            border-bottom: 1px solid rgba(148,191,224,0.12);
-        }
-        .presence-book-close {
-            margin-left: auto;
-            padding: 0 3px;
-            min-height: 18px;
-            border: 0;
-            background: transparent;
-            color: #91a7b8;
-            font-size: 16px;
-            line-height: 1;
-        }
-        .presence-book-close:hover { color: #ffffff; }
-        .presence-book-count {
-            color: #cce9f3;
-            background: rgba(85,214,255,0.12);
-            border: 1px solid rgba(85,214,255,0.2);
-            border-radius: 999px;
-            padding: 2px 6px;
-            font-size: 9px;
         }
         .presence-book-list { display: grid; gap: 4px; }
         .presence-book-row {
@@ -1095,8 +1056,7 @@
         <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
         <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
         <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
-        <button id="nav-online-btn" class="nav-link hidden" type="button" onclick="toggleOnlineUsers()">Онлайн</button>
-        <div id="online-users" class="online-nav-popover nav-link presence-link hidden" title="Пользователи онлайн"></div>
+        <div id="online-users" class="online-status-panel hidden" title="Пользователи онлайн"></div>
         <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
         <div id="admin-shift-countdown" class="nav-link nav-shift-status hidden">до 03:00</div>
     </div>
@@ -1818,7 +1778,6 @@ function trackAction(message) {
         if (id === 'owner-page' && !isOwnerOrIT()) { showSystemToast('Доступ только владельцу или IT'); return; }
         if (id === 'cash-page' && !isOwnerOrIT() && getUserRole() !== 'admin') { showSystemToast('Касса доступна только сотрудникам смены'); return; }
         if (id === 'admin-page' && (!currentUser || currentUser.role !== 'admin')) { showSystemToast('Меню доступно только администратору'); return; }
-        setOnlineUsersVisibility(false);
         document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
         document.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
@@ -2141,7 +2100,6 @@ window.addEventListener('load', () => {
 function logout() { localStorage.removeItem('restart_user'); location.reload(); }
 let presenceInterval = null;
 let adminControlReminderInterval = null;
-let onlineUsersVisible = false;
 const presenceSessionId = sessionStorage.getItem('presence_session_id') || crypto.randomUUID();
 sessionStorage.setItem('presence_session_id', presenceSessionId);
 
@@ -2154,37 +2112,14 @@ function startAdminControlReminder() {
     }, 180000);
 }
 
-function setOnlineUsersVisibility(visible) {
-    onlineUsersVisible = visible;
-    const onlineList = document.getElementById('online-users');
-    const onlineButton = document.getElementById('nav-online-btn');
-    onlineList?.classList.toggle('hidden', !visible);
-    onlineButton?.classList.toggle('active', visible);
-}
-
 function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
     if (!element || !currentUser) return;
     const visibleUsers = users.length ? users : [{ name: currentUser.name, role: getUserRole() }];
-    element.innerHTML = `<div class="presence-book-title"><span>Сейчас онлайн</span><button type="button" class="presence-book-close" onclick="toggleOnlineUsers(event)" aria-label="Скрыть онлайн">×</button><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
+    element.innerHTML = `<div class="presence-book-title"><span>Онлайн</span><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
     element.title = visibleUsers.map(user => `${user.name} (${user.role})`).join('\n');
-    element.classList.toggle('hidden', !onlineUsersVisible);
+    element.classList.remove('hidden');
 }
-
-function toggleOnlineUsers(event) {
-    event?.stopPropagation();
-    setOnlineUsersVisibility(!onlineUsersVisible);
-}
-
-document.addEventListener('click', (event) => {
-    const onlineButton = document.getElementById('nav-online-btn');
-    const onlineList = document.getElementById('online-users');
-    if (!onlineUsersVisible || !onlineButton || !onlineList) return;
-    const clickedInsideOnline = onlineButton.contains(event.target) || onlineList.contains(event.target);
-    if (!clickedInsideOnline) {
-        setOnlineUsersVisibility(false);
-    }
-});
 
 function escapeHtml(value) {
     return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -2238,7 +2173,8 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
-    document.getElementById('nav-online-btn')?.classList.remove('hidden');
+    const onlineUsers = document.getElementById('online-users');
+    if (onlineUsers) onlineUsers.classList.remove('hidden');
     if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
     const adminShiftFields = document.getElementById('admin-shift-fields');
     if (adminShiftFields) adminShiftFields.classList.toggle('hidden', getUserRole() !== 'admin');
