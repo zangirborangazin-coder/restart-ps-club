@@ -293,11 +293,19 @@ app.post('/api/shift-reports', async (req, res) => {
 	const report = req.body || {};
 	if (!report.dateKey || !report.admin || !Number.isFinite(Number(report.total))) return res.status(400).json({ error: 'Некорректный отчёт смены' });
 	if (!databaseAvailable) {
+		if (report.source === 'shift_opened') {
+			const existing = memoryShiftReports.find(item => item.source === 'shift_opened' && item.dateKey === report.dateKey && item.admin === report.admin && item.shiftMeta?.status !== 'closed');
+			if (existing) return res.status(200).json(existing);
+		}
 		const savedReport = { ...report, id: Date.now() };
 		memoryShiftReports.push(savedReport);
 		return res.status(201).json(savedReport);
 	}
 	try {
+		if (report.source === 'shift_opened') {
+			const existing = await pool.query(`SELECT id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details,shift_meta AS "shiftMeta" FROM shift_reports WHERE date_key = $1 AND admin = $2 AND source = 'shift_opened' AND COALESCE(shift_meta->>'status', 'open') <> 'closed' ORDER BY timestamp DESC LIMIT 1`, [report.dateKey, report.admin]);
+			if (existing.rows[0]) return res.status(200).json(existing.rows[0]);
+		}
 		const { rows } = await pool.query(
 			`INSERT INTO shift_reports (date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details,shift_meta)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details,shift_meta AS "shiftMeta"`,
