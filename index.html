@@ -52,8 +52,42 @@
             backdrop-filter: saturate(180%) blur(20px);
             height: 60px;       
             border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-            display: flex; justify-content: center; align-items: center;
+            display: flex; justify-content: space-between; align-items: center;
             position: sticky; top: 0; z-index: 1000;
+        }
+
+        .nav-group {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .nav-group-right {
+            margin-left: auto;
+        }
+
+        .nav-shift-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 999px;
+            padding: 0.35rem 0.8rem;
+            background: rgba(34, 211, 238, 0.12);
+            border: 1px solid rgba(34, 211, 238, 0.22);
+            color: #baf3ff !important;
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .nav-shift-status::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22d3ee;
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
         }
 
         .nav-link { 
@@ -674,16 +708,22 @@
 </div>
 
 <nav>
-    <button id="menu-toggle" type="button" onclick="toggleMobileMenu()">Открыть меню</button>
-    <div class="nav-link active" onclick="showPage('main-page', this)">Управление</div>
-    <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
-    <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
-    <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
-    <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
-    <div id="online-users" class="nav-link presence-link hidden" title="Пользователи онлайн"></div>
-    <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
-    <div id="nav-profile-btn" class="nav-link hidden" onclick="openProfileModal()">Профиль</div>
-    <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
+    <div class="nav-group nav-group-left">
+        <button id="menu-toggle" type="button" onclick="toggleMobileMenu()">Открыть меню</button>
+        <div class="nav-link active" onclick="showPage('main-page', this)">Управление</div>
+        <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
+        <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
+        <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
+        <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
+        <div id="admin-shift-countdown" class="nav-link nav-shift-status hidden">до 03:00</div>
+    </div>
+    <div class="nav-group nav-group-right">
+        <div id="admin-reverse-report" class="nav-link hidden" style="color:#c4f1ff; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.22); border-radius: 999px; padding: 0.35rem 0.8rem; line-height: 1.2; white-space: nowrap;">Касса: 0 ₸ · Взял: 0 ₸ · Остался: 0 ₸</div>
+        <div id="online-users" class="nav-link presence-link hidden" title="Пользователи онлайн"></div>
+        <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
+        <div id="nav-profile-btn" class="nav-link hidden" onclick="openProfileModal()">Профиль</div>
+        <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
+    </div>
 </nav>
 
 <div id="system-toast"></div>
@@ -739,10 +779,13 @@
             </div>
             <div id="admin-shift-fields" class="hidden mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label class="text-xs text-slate-400">Касса<input id="admin-shift-cash" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
-                <label class="text-xs text-slate-400">Взял<input id="admin-shift-taken" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
+                <label class="text-xs text-slate-400">Взял<select id="admin-shift-taken" class="mt-2 w-full">
+                    <option value="0">0 ₸</option>
+                    <option value="7000">7000 ₸ наличный</option>
+                    <option value="7000">7000 ₸ Kaspi</option>
+                </select></label>
                 <label class="text-xs text-slate-400">Остался<input id="admin-shift-remaining" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
                 <button type="button" class="btn-stealth text-xs sm:col-span-3" onclick="saveAdminShiftMeta()">Сохранить кассу</button>
-                <div class="text-xs text-slate-400 sm:col-span-3">Смена: <strong id="admin-shift-countdown" class="text-cyan-300">до 03:00</strong></div>
                 <button id="admin-close-shift" type="button" class="btn-secondary text-xs sm:col-span-3" onclick="closeAdminShift()">Закрыть смену</button>
                 <label class="text-xs text-slate-400 sm:col-span-3">Фото QR чеков<input id="admin-receipts-file" type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.heic,.heif,.png" multiple class="mt-2" onchange="saveAdminReceiptPhotos(event)"></label>
                 <div id="admin-receipts-progress" class="hidden mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800/60">
@@ -1666,6 +1709,11 @@ async function login(event) {
     localStorage.setItem('restart_user', JSON.stringify(currentUser));
     document.getElementById('login-screen').classList.add('hidden');
     configureAccess();
+    if (getUserRole() === 'admin') {
+        await ensureAdminShiftOpened();
+        renderOwnerPanel();
+        await syncAllData();
+    }
     trackAction('Вход в систему');
 }
 
@@ -1755,8 +1803,10 @@ function configureAccess() {
     startPresence();
     fetchCashBalance();
     renderLastSettlement();
+    if (getUserRole() === 'admin') {
+        ensureAdminShiftOpened();
+    }
     renderOwnerPanel();
-    if (getUserRole() === 'admin') ensureAdminShiftOpened();
 }
 function initAccess() {
     if (currentUser) { document.getElementById('login-screen').classList.add('hidden'); configureAccess(); }
@@ -1792,11 +1842,13 @@ function getShiftCloseDate() {
 function renderAdminShiftClock(meta = {}) {
     const countdown = document.getElementById('admin-shift-countdown');
     const closeButton = document.getElementById('admin-close-shift');
+    const reverseReport = document.getElementById('admin-reverse-report');
     if (!countdown) return;
     clearInterval(adminShiftClockInterval);
     if (meta.status === 'closed') {
         countdown.textContent = `закрыта в ${new Date(meta.closedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
         if (closeButton) closeButton.disabled = true;
+        if (reverseReport) reverseReport.textContent = `Касса: ${Number(meta.cash || 0).toLocaleString()} ₸ · Взял: ${Number(meta.taken || 0).toLocaleString()} ₸ · Остался: ${Number(meta.remaining || 0).toLocaleString()} ₸`;
         return;
     }
     if (closeButton) closeButton.disabled = false;
@@ -1806,6 +1858,13 @@ function renderAdminShiftClock(meta = {}) {
         const minutes = Math.floor((remaining % 3600000) / 60000);
         const seconds = Math.floor((remaining % 60000) / 1000);
         countdown.textContent = remaining ? `до 03:00 · ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : 'время смены истекло';
+        if (reverseReport) {
+            const cash = Number(document.getElementById('admin-shift-cash')?.value || meta.cash || 0);
+            const taken = Number(document.getElementById('admin-shift-taken')?.value || meta.taken || 0);
+            const remainingBalance = Number(document.getElementById('admin-shift-remaining')?.value || meta.remaining || 0);
+            reverseReport.textContent = `Касса: ${cash.toLocaleString()} ₸ · Взял: ${taken.toLocaleString()} ₸ · Остался: ${remainingBalance.toLocaleString()} ₸`;
+            reverseReport.classList.remove('hidden');
+        }
     };
     update();
     adminShiftClockInterval = setInterval(update, 1000);
@@ -1848,7 +1907,10 @@ async function ensureAdminShiftOpened() {
     const takenInput = document.getElementById('admin-shift-taken');
     const remainingInput = document.getElementById('admin-shift-remaining');
     if (cashInput) cashInput.value = meta.cash ?? report.previousCash;
-    if (takenInput) takenInput.value = meta.taken ?? 0;
+    if (takenInput) {
+        const selectedTake = Number(meta.taken ?? 0);
+        takenInput.value = selectedTake === 7000 ? '7000' : (selectedTake || 0);
+    }
     if (remainingInput) remainingInput.value = meta.remaining ?? report.finalCash;
     renderAdminReceiptStatus(meta);
     renderAdminShiftClock(meta);
