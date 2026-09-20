@@ -156,6 +156,7 @@ async function initializeDatabase() {
 	`);
 	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_title TEXT NOT NULL DEFAULT ''`);
 	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS expense_amount INTEGER NOT NULL DEFAULT 0`);
+	await pool.query(`ALTER TABLE shift_reports ADD COLUMN IF NOT EXISTS shift_meta JSONB NOT NULL DEFAULT '{}'::jsonb`);
 	await pool.query(`
 		CREATE TABLE IF NOT EXISTS revenue_adjustments (
 			date_key TEXT PRIMARY KEY,
@@ -283,7 +284,7 @@ app.delete('/api/employees/:id', async (req, res) => {
 app.get('/api/shift-reports', async (_req, res) => {
 	if (!databaseAvailable) return res.json(memoryShiftReports);
 	try {
-		const { rows } = await pool.query('SELECT id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details FROM shift_reports ORDER BY timestamp');
+		const { rows } = await pool.query('SELECT id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details,shift_meta AS "shiftMeta" FROM shift_reports ORDER BY timestamp');
 		res.json(rows);
 	} catch (error) { console.error('GET /api/shift-reports:', error); res.status(500).json({ error: 'Не удалось загрузить отчёты смен' }); }
 });
@@ -298,12 +299,28 @@ app.post('/api/shift-reports', async (req, res) => {
 	}
 	try {
 		const { rows } = await pool.query(
-			`INSERT INTO shift_reports (date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details`,
-			[report.dateKey, report.date || report.dateKey, report.timestamp || Date.now(), report.admin, Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || [])]
+			`INSERT INTO shift_reports (date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details,shift_meta)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,date_key,report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details,shift_meta AS "shiftMeta"`,
+			[report.dateKey, report.date || report.dateKey, report.timestamp || Date.now(), report.admin, Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || []), JSON.stringify(report.shiftMeta || {})]
 		);
 		res.status(201).json(rows[0]);
 	} catch (error) { console.error('POST /api/shift-reports:', error); res.status(500).json({ error: 'Не удалось сохранить отчёт смены' }); }
+});
+
+app.put('/api/shift-reports/:id/meta', async (req, res) => {
+	const shiftMeta = req.body?.shiftMeta;
+	if (!shiftMeta || typeof shiftMeta !== 'object') return res.status(400).json({ error: 'Некорректные данные смены' });
+	if (!databaseAvailable) {
+		const report = memoryShiftReports.find(item => String(item.id) === String(req.params.id));
+		if (!report) return res.status(404).json({ error: 'Смена не найдена' });
+		report.shiftMeta = shiftMeta;
+		return res.json(report);
+	}
+	try {
+		const { rows } = await pool.query('UPDATE shift_reports SET shift_meta = $1 WHERE id = $2 RETURNING id,shift_meta AS "shiftMeta"', [JSON.stringify(shiftMeta), req.params.id]);
+		if (!rows[0]) return res.status(404).json({ error: 'Смена не найдена' });
+		res.json(rows[0]);
+	} catch (error) { console.error('PUT /api/shift-reports/:id/meta:', error); res.status(500).json({ error: 'Не удалось сохранить данные смены' }); }
 });
 
 app.delete('/api/shift-reports/date/:dateKey', async (req, res) => {
@@ -521,7 +538,7 @@ app.get('/api/revenue-backup', async (_req, res) => {
 	try {
 		const [paymentsResult, reportsResult, adjustmentsResult, cashResult] = await Promise.all([
 			pool.query('SELECT id,cash,qr,timestamp,date_key AS "dateKey",time,start_str AS "startStr",end_str AS "endStr",total,duration,zone FROM payments ORDER BY timestamp'),
-			pool.query('SELECT id,date_key AS "dateKey",report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details FROM shift_reports ORDER BY timestamp'),
+			pool.query('SELECT id,date_key AS "dateKey",report_date AS date,timestamp,admin,qr,cash,previous_cash AS "previousCash",source,final_cash AS "finalCash",total,expense_title AS "expenseTitle",expense_amount AS "expenseAmount",details,shift_meta AS "shiftMeta" FROM shift_reports ORDER BY timestamp'),
 			pool.query('SELECT date_key AS "dateKey",qr,cash,changed_by AS "changedBy",changed_at AS "changedAt" FROM revenue_adjustments'),
 			pool.query('SELECT amount,denominations,user_name AS user,date_key AS "dateKey",updated_at AS "updatedAt" FROM cash_balance WHERE id = 1')
 		]);
@@ -552,7 +569,7 @@ app.post('/api/revenue-backup', async (req, res) => {
 			await client.query(`INSERT INTO payments (id,cash,qr,timestamp,date_key,time,start_str,end_str,total,duration,zone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [payment.id, Number(payment.cash) || 0, Number(payment.qr) || 0, payment.timestamp || Date.now(), payment.dateKey || payment.date_key, payment.time || '', payment.startStr || payment.start_str || '', payment.endStr || payment.end_str || '', Number(payment.total) || 0, payment.duration || '', payment.zone || '']);
 		}
 		for (const report of backup.shiftReports) {
-			await client.query(`INSERT INTO shift_reports (id,date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [report.id, report.dateKey || report.date_key, report.date || report.dateKey, report.timestamp || Date.now(), report.admin || '', Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || [])]);
+			await client.query(`INSERT INTO shift_reports (id,date_key,report_date,timestamp,admin,qr,cash,previous_cash,source,final_cash,total,expense_title,expense_amount,details,shift_meta) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [report.id, report.dateKey || report.date_key, report.date || report.dateKey, report.timestamp || Date.now(), report.admin || '', Number(report.qr) || 0, Number(report.cash) || 0, Number(report.previousCash) || 0, report.source || 'cash', Number(report.finalCash) || 0, Number(report.total) || 0, report.expenseTitle || '', Number(report.expenseAmount) || 0, JSON.stringify(report.details || []), JSON.stringify(report.shiftMeta || {})]);
 		}
 		for (const [dateKey, adjustment] of Object.entries(backup.revenueAdjustments)) {
 			await client.query('INSERT INTO revenue_adjustments (date_key,qr,cash,changed_by) VALUES ($1,$2,$3,$4)', [dateKey, Number(adjustment.qr) || 0, Number(adjustment.cash) || 0, adjustment.changedBy || 'backup']);
