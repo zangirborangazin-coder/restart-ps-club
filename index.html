@@ -6,6 +6,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
      <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="shortcut icon" href="/favicon.svg" type="image/x-icon">
@@ -741,6 +744,8 @@
                 <label class="text-xs text-slate-400">Касса<input id="admin-shift-cash" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
                 <label class="text-xs text-slate-400">Взял<input id="admin-shift-taken" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
                 <label class="text-xs text-slate-400">Остался<input id="admin-shift-remaining" type="number" min="0" placeholder="0 ₸" class="mt-2"></label>
+                <label class="text-xs text-slate-400 sm:col-span-3">QR чеки<input id="admin-receipts-file" type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.heic,.heif,.png" multiple class="mt-2" onchange="processAdminReceipts(event)"></label>
+                <div id="admin-receipts-status" class="text-xs text-slate-400 sm:col-span-3">Чеки не загружены</div>
             </div>
         </div>
         <div id="last-shift-result" class="hidden w-full h-full">
@@ -1733,7 +1738,7 @@ function configureAccess() {
         }
     }
     document.querySelectorAll('#cash-page input').forEach(input => {
-        const protectedFinanceField = !input.classList.contains('denom-count');
+        const protectedFinanceField = !input.classList.contains('denom-count') && !input.closest('#admin-shift-fields');
         input.readOnly = getUserRole() === 'admin' && protectedFinanceField;
         input.disabled = getUserRole() === 'admin' && protectedFinanceField;
     });
@@ -1756,9 +1761,10 @@ async function ensureAdminShiftOpened() {
     if (!currentUser || getUserRole() !== 'admin') return;
     const dateKey = getShiftDateKey();
     const history = getHistory();
-    const alreadyOpened = history.some(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
-    if (alreadyOpened) return;
-    const report = {
+    let report = history.find(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
+    let isNew = false;
+    if (!report) {
+        report = {
         date: dateKey.split('-').reverse().join('.'),
         dateKey,
         timestamp: Date.now(),
@@ -1769,21 +1775,106 @@ async function ensureAdminShiftOpened() {
         source: 'shift_opened',
         finalCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
         total: 0,
-        details: []
-    };
-    history.push(report);
-    localStorage.setItem('shift_history', JSON.stringify(history));
+        details: [],
+        shiftMeta: { cash: 0, taken: 0, remaining: 0, receiptCount: 0, receiptTotal: 0, qrExpected: 0, qrMatches: null, receipts: [] }
+        };
+        history.push(report);
+        isNew = true;
+        localStorage.setItem('shift_history', JSON.stringify(history));
+    }
+    const meta = report.shiftMeta || {};
     const cashInput = document.getElementById('admin-shift-cash');
+    const takenInput = document.getElementById('admin-shift-taken');
     const remainingInput = document.getElementById('admin-shift-remaining');
-    if (cashInput) cashInput.value = report.previousCash;
-    if (remainingInput) remainingInput.value = report.finalCash;
+    if (cashInput) cashInput.value = meta.cash ?? report.previousCash;
+    if (takenInput) takenInput.value = meta.taken ?? 0;
+    if (remainingInput) remainingInput.value = meta.remaining ?? report.finalCash;
+    document.querySelectorAll('#admin-shift-fields input[type="number"]').forEach(input => input.oninput = saveAdminShiftMeta);
+    renderAdminReceiptStatus(meta);
+    if (!isNew) return;
     try {
         const response = await fetch('/api/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
         if (!response.ok) throw new Error('shift');
+        const saved = await response.json();
+        const updatedHistory = getHistory().map(item => item.timestamp === report.timestamp ? { ...item, id: saved.id, shiftMeta: saved.shiftMeta || report.shiftMeta } : item);
+        localStorage.setItem('shift_history', JSON.stringify(updatedHistory));
         await syncAllData();
     } catch (error) {
         showSystemToast('Смена открыта локально до восстановления связи');
     }
+}
+function getAdminShiftReport() {
+    const dateKey = getShiftDateKey();
+    return getHistory().find(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
+}
+function parseInputSum(value) {
+    return String(value || '').trim().split(/\s+/).reduce((sum, part) => sum + (Number(part) || 0), 0);
+}
+function renderAdminReceiptStatus(meta = {}) {
+    const status = document.getElementById('admin-receipts-status');
+    if (!status) return;
+    const count = Number(meta.receiptCount || 0);
+    if (!count) { status.textContent = 'Чеки не загружены'; return; }
+    const match = meta.qrMatches === null || meta.qrMatches === undefined ? 'сравнение не выполнено' : (meta.qrMatches ? 'QR сходится' : 'QR не сходится');
+    status.textContent = `Чеков: ${count} · Сумма чеков: ${Number(meta.receiptTotal || 0).toLocaleString()} ₸ · QR в смене: ${Number(meta.qrExpected || 0).toLocaleString()} ₸ · ${match}`;
+}
+async function saveAdminShiftMeta(extra = {}) {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const report = getAdminShiftReport();
+    if (!report) return;
+    const previous = report.shiftMeta || {};
+    const shiftMeta = {
+        ...previous,
+        cash: Number(document.getElementById('admin-shift-cash')?.value) || 0,
+        taken: Number(document.getElementById('admin-shift-taken')?.value) || 0,
+        remaining: Number(document.getElementById('admin-shift-remaining')?.value) || 0,
+        ...extra
+    };
+    report.shiftMeta = shiftMeta;
+    const history = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? report : item);
+    localStorage.setItem('shift_history', JSON.stringify(history));
+    if (!report.id) return;
+    await fetch(`/api/shift-reports/${report.id}/meta`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shiftMeta }) }).catch(() => null);
+}
+function parseReceiptAmount(text) {
+    const labeled = [...String(text || '').matchAll(/(?:итого|сумма|total|amount|к оплате|оплачено)[^\d]{0,30}([\d\s.,]{2,})/gi)];
+    const candidates = labeled.map(match => match[1]);
+    if (!candidates.length) candidates.push(...String(text || '').match(/\b\d[\d\s]{2,}\b/g) || []);
+    return Math.max(0, ...candidates.map(value => Number(String(value).replace(/\s/g, '').replace(',', '.').replace(/\.$/, '')) || 0));
+}
+async function readReceiptText(file) {
+    const fileName = file.name.toLowerCase();
+    let image = file;
+    if (file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/.test(fileName)) {
+        image = await heic2any({ blob: file, toType: 'image/png' });
+        if (Array.isArray(image)) image = image[0];
+    }
+    const result = await Tesseract.recognize(image, 'eng');
+    return result.data.text;
+}
+async function processAdminReceipts(event) {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const selectedFiles = [...(event.target.files || [])];
+    const files = selectedFiles.slice(0, 20);
+    if (!files.length) return;
+    const status = document.getElementById('admin-receipts-status');
+    const limitNotice = selectedFiles.length > 20 ? 'Первые 20 из выбранных файлов. ' : '';
+    if (status) status.textContent = `${limitNotice}Распознавание чеков: 0/${files.length}...`;
+    const receipts = [];
+    for (const [index, file] of files.entries()) {
+        try {
+            const text = await readReceiptText(file);
+            receipts.push({ name: file.name, amount: parseReceiptAmount(text) });
+        } catch (error) {
+            receipts.push({ name: file.name, amount: 0, error: true });
+        }
+        if (status) status.textContent = `${limitNotice}Распознавание чеков: ${index + 1}/${files.length}...`;
+    }
+    const receiptTotal = receipts.reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0);
+    const qrExpected = parseInputSum(document.getElementById('qr-input')?.value);
+    await saveAdminShiftMeta({ receipts, receiptCount: receipts.length, receiptTotal, qrExpected, qrMatches: receiptTotal === qrExpected });
+    renderAdminReceiptStatus({ receipts, receiptCount: receipts.length, receiptTotal, qrExpected, qrMatches: receiptTotal === qrExpected });
+    renderOwnerPanel();
 }
 async function fetchCashBalance() {
     try {
@@ -2149,7 +2240,7 @@ function renderOwnerPanel() {
     document.getElementById('owner-cash-balance').innerText = `${Number(currentCashBalance?.amount || 0).toLocaleString()} ₸`;
     document.getElementById('owner-cash-updated').innerText = currentCashBalance ? `${currentCashBalance.user}, ${currentCashBalance.updatedAt || currentCashBalance.updated_at || ''}` : 'Данных пока нет';
     const canEditFinancials = ['owner', 'it'].includes(getUserRole());
-    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : ''}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
+    document.getElementById('history-body').innerHTML = history.slice().reverse().map((item, reverseIndex) => { const meta = item.shiftMeta || {}; const shiftInfo = item.source === 'shift_opened' ? `<div class="text-[10px] text-slate-400 mt-1">Касса ${Number(meta.cash || 0).toLocaleString()} · Взял ${Number(meta.taken || 0).toLocaleString()} · Остался ${Number(meta.remaining || 0).toLocaleString()}<br>Чеки ${Number(meta.receiptCount || 0)} · QR чеки ${Number(meta.receiptTotal || 0).toLocaleString()} ₸ · ${meta.qrMatches === true ? 'Сходится' : meta.qrMatches === false ? 'Не сходится' : 'Нет проверки'}</div>` : ''; return `<tr><td>${item.date}</td><td>${item.admin}${item.source === 'shift_opened' ? ' · Смена открыта' : ''}${shiftInfo}</td><td>${Number(item.qr || 0).toLocaleString()} ₸</td><td>${Number(item.cash || 0).toLocaleString()} ₸</td><td>${item.expenseAmount ? `${Number(item.expenseAmount).toLocaleString()} ₸${item.expenseTitle ? ` · ${escapeHtml(item.expenseTitle)}` : ''}` : '-'}</td><td>${Number(item.finalCash || 0).toLocaleString()} ₸</td><td>${canEditFinancials && item.source !== 'shift_opened' ? `<button class="text-blue-400" title="Изменить" onclick="editShiftHistory(${history.length - 1 - reverseIndex})">✎</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="text-slate-500">История пока пуста</td></tr>';
     const adjustment = getRevenueAdjustment(getLocalDateKey());
     const baseQr = today.reduce((sum, item) => sum + Number(item.qr || 0), 0);
     const baseCash = today.reduce((sum, item) => sum + Number(item.cash || 0), 0);
