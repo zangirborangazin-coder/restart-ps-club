@@ -794,6 +794,7 @@
                 <button type="button" class="btn-stealth text-xs sm:col-span-3" onclick="saveAdminShiftMeta()">Сохранить кассу</button>
                 <button id="admin-close-shift" type="button" class="btn-secondary text-xs sm:col-span-3" onclick="closeAdminShift()">Закрыть смену</button>
                 <label class="text-xs text-slate-400 sm:col-span-3">Фото QR чеков<input id="admin-receipts-file" type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.heic,.heif,.png" multiple class="mt-2" onchange="saveAdminReceiptPhotos(event)"></label>
+                <button type="button" class="btn-stealth text-xs sm:col-span-3" onclick="sendAdminReceiptPhotosToOwner()">Отправить владельцу</button>
                 <button type="button" class="btn-secondary text-xs text-red-300 sm:col-span-3" onclick="clearAdminReceiptPhotos()">Очистить загруженные фото</button>
                 <div id="admin-receipts-progress" class="hidden mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800/60">
                     <div id="admin-receipts-progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 transition-all duration-200"></div>
@@ -1870,6 +1871,7 @@ function getHistory() {
 function getExpenses() { return JSON.parse(localStorage.getItem('shift_expenses') || '[]'); }
 let currentCashBalance = JSON.parse(localStorage.getItem('cash_balance') || 'null');
 let adminShiftClockInterval = null;
+let adminShiftOpenPromise = null;
 function getShiftCloseDate() {
     const closeDate = new Date();
     if (closeDate.getHours() >= 3) closeDate.setDate(closeDate.getDate() + 1);
@@ -1906,7 +1908,7 @@ function renderAdminShiftClock(meta = {}) {
     update();
     adminShiftClockInterval = setInterval(update, 1000);
 }
-async function ensureAdminShiftOpened() {
+async function ensureAdminShiftOpenedInternal() {
     if (!currentUser || getUserRole() !== 'admin') return null;
     const dateKey = getShiftDateKey();
     const history = getHistory();
@@ -1970,7 +1972,9 @@ async function ensureAdminShiftOpened() {
         const response = await fetch('/api/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) });
         if (!response.ok) throw new Error('shift');
         const saved = await response.json();
-        const updatedHistory = getHistory().map(item => item.timestamp === report.timestamp ? { ...item, id: saved.id, shiftMeta: saved.shiftMeta || report.shiftMeta } : item);
+        const updatedHistory = getHistory()
+            .filter(item => !(item.dateKey === report.dateKey && item.admin === report.admin && item.source === 'shift_opened' && item.shiftMeta?.status !== 'closed'))
+            .concat({ ...saved, shiftMeta: saved.shiftMeta || report.shiftMeta });
         localStorage.setItem('shift_history', JSON.stringify(updatedHistory));
         if (isOwnerOrIT()) renderOwnerPanel();
         await syncAllData();
@@ -1978,6 +1982,13 @@ async function ensureAdminShiftOpened() {
         showSystemToast('Смена открыта локально до восстановления связи');
     }
     return report;
+}
+function ensureAdminShiftOpened() {
+    if (adminShiftOpenPromise) return adminShiftOpenPromise;
+    adminShiftOpenPromise = ensureAdminShiftOpenedInternal().finally(() => {
+        adminShiftOpenPromise = null;
+    });
+    return adminShiftOpenPromise;
 }
 async function closeAdminShift() {
     if (!currentUser || getUserRole() !== 'admin') return;
@@ -2248,6 +2259,19 @@ async function saveAdminReceiptPhotos(event) {
     finalizeAdminReceiptProgress(`Фото успешно загружено и отправлено владельцу: ${mergedReceipts.length}`);
     showSystemToast('Фото успешно загружено и отправлено владельцу');
     if (event.target) event.target.value = '';
+}
+async function sendAdminReceiptPhotosToOwner() {
+    if (!currentUser || getUserRole() !== 'admin') return;
+    const report = getAdminShiftReport();
+    if (!report) return showSystemToast('Открытая смена не найдена');
+    const receipts = Array.isArray(report.shiftMeta?.receipts) && report.shiftMeta.receipts.length
+        ? report.shiftMeta.receipts
+        : restorePersistedAdminReceipts(report.dateKey, report.admin);
+    if (!receipts.length) return showSystemToast('Сначала загрузите фото QR-чеков');
+    await saveAdminShiftMeta({ receipts });
+    renderAdminReceiptStatus({ receipts });
+    await syncAllData();
+    showSystemToast(`Фото успешно отправлено владельцу: ${receipts.length}`);
 }
 async function clearAdminReceiptPhotos() {
     if (!currentUser || getUserRole() !== 'admin') return;
