@@ -1837,6 +1837,18 @@ function getRevenueTotals(dateKey) {
         cash: records.reduce((sum, item) => sum + Number(item.cash || 0), 0)
     };
 }
+function getRevenueShiftCount(dateKey) {
+    const shiftReports = getHistory().filter(report => getRevenueDateKey(report) === dateKey);
+    const activeShiftRevenue = Object.values(payments).some(payment => getRevenueDateKey(payment) === dateKey);
+    return Math.max(1, shiftReports.length + (activeShiftRevenue ? 1 : 0));
+}
+function getNetRevenueTotals(dateKey) {
+    const totals = getRevenueTotals(dateKey);
+    const gross = totals.qr + totals.cash;
+    const salary = Math.min(gross, 7000 * getRevenueShiftCount(dateKey));
+    const netCash = Math.max(0, totals.cash - salary);
+    return { qr: totals.qr, cash: netCash, total: Math.max(0, gross - salary) };
+}
 function getRevenueForDate(dateKey) {
     const history = getHistory();
     const matchingHistory = history.filter(item => getRevenueDateKey(item) === dateKey);
@@ -1886,7 +1898,7 @@ function renderSelectedRevenue() {
     if (!selectedDate) return;
     localStorage.setItem('selected_revenue_date', selectedDate);
     const result = document.getElementById('selected-revenue');
-    const totals = getRevenueTotals(selectedDate);
+    const totals = getNetRevenueTotals(selectedDate);
     const qr = totals.qr;
     const cash = totals.cash;
     const editButton = (type) => currentUser?.role === 'owner' ? `<button type="button" class="text-slate-400 hover:text-blue-400 ml-2" title="Изменить" onclick="editRevenueValue('${type}')">✎</button>` : '';
@@ -2059,7 +2071,7 @@ function renderRevenueCalendar() {
     for (let index = 0; index < firstDay; index++) cells.push('<div class="revenue-day empty" aria-hidden="true"></div>');
     for (let day = 1; day <= daysInMonth; day++) {
         const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const totals = getRevenueTotals(dateKey);
+        const totals = getNetRevenueTotals(dateKey);
         const total = totals.qr + totals.cash;
         const classes = ['revenue-day'];
         if (dateKey === input.value) classes.push('selected');
@@ -2085,9 +2097,7 @@ function renderOwnerPanel() {
             const totals = getRevenueTotals(dateKey);
             const dailyRevenue = totals.qr + totals.cash;
             if (dailyRevenue <= 0) continue;
-            const shiftReports = getHistory().filter(report => getRevenueDateKey(report) === dateKey);
-            const activeShiftRevenue = Object.values(payments).some(payment => getRevenueDateKey(payment) === dateKey);
-            const shiftCount = Math.max(1, shiftReports.length + (activeShiftRevenue ? 1 : 0));
+            const shiftCount = getRevenueShiftCount(dateKey);
             total += Math.max(0, dailyRevenue - dailySalary * shiftCount);
         }
         return total;
