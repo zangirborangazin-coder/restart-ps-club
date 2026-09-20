@@ -565,7 +565,6 @@
         }
         #login-screen.hidden { display: none; }
         .login-box { width: min(420px, 100%); padding: 34px; }
-        .role-chip { display: inline-flex; padding: 6px 10px; border-radius: 999px; background: rgba(56,189,248,.12); color: #7dd3fc; font-size: 11px; font-weight: 700; }
         .owner-stat { padding: 18px; border: 1px solid rgba(148,163,184,.12); border-radius: 18px; background: rgba(255,255,255,.04); }
         .owner-table { width: 100%; border-collapse: collapse; }
         .owner-table th, .owner-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; font-size: 12px; }
@@ -637,7 +636,6 @@
         #cash-page .bg-blue-600\/10 { background: linear-gradient(145deg, rgba(29,112,158,0.2), rgba(45,180,148,0.1)); }
         #cash-page .text-4xl { color: #effcff; text-shadow: 0 0 28px rgba(85,214,255,0.22); }
         #login-screen { background: radial-gradient(circle at 50% 15%, rgba(44,155,211,0.18), transparent 32%), #050811; }
-        .role-chip { background: rgba(85,214,255,0.12); border: 1px solid rgba(85,214,255,0.18); }
         #system-toast { background: linear-gradient(135deg, rgba(22,125,169,0.96), rgba(19,75,107,0.96)); box-shadow: 0 12px 40px rgba(21,158,211,0.3); }
         @media (max-width: 700px) {
             nav { border-radius: 0 0 18px 18px; }
@@ -1084,7 +1082,6 @@
     </div>
     <div class="nav-group nav-group-right">
         <div id="admin-reverse-report" class="nav-link hidden" style="color:#c4f1ff; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.22); border-radius: 999px; padding: 0.35rem 0.8rem; line-height: 1.2; white-space: nowrap;">Касса: 0 ₸ · Взял: 0 ₸ · Остался: 0 ₸</div>
-        <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
         <div id="nav-profile-btn" class="nav-link hidden" onclick="openProfileModal()">Профиль</div>
         <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
     </div>
@@ -1224,7 +1221,6 @@
 <div id="owner-page" class="page hidden max-w-7xl mx-auto p-10">
     <div class="section-head">
         <div><div class="text-xs uppercase tracking-[0.35em] text-slate-400">OWNER CONTROL</div><h1 class="section-title mt-2">Панель владельца</h1></div>
-        <span id="owner-name-chip" class="role-chip"></span>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div class="owner-stat"><div class="text-xs text-slate-400">Сегодня</div><div id="owner-today" class="text-2xl font-black mt-2">0 ₸</div></div>
@@ -1294,7 +1290,7 @@
 </div>
 
 <div id="admin-page" class="page hidden max-w-3xl mx-auto p-10">
-    <div class="section-head"><div><div class="text-xs uppercase tracking-[0.35em] text-slate-400">SHIFT CONTROL</div><h1 class="section-title mt-2">Меню администратора</h1></div><span class="role-chip">Только операции смены</span></div>
+    <div class="section-head"><div><div class="text-xs uppercase tracking-[0.35em] text-slate-400">SHIFT CONTROL</div><h1 class="section-title mt-2">Меню администратора</h1></div></div>
     <div class="stealth-card p-7">
         <h2 class="text-xl font-bold mb-2">Сдача смены</h2>
         <p class="text-sm text-slate-400 mb-6">После сдачи владелец увидит каждую оплату по VIP, QR, наличные и итог за сегодня.</p>
@@ -2187,8 +2183,7 @@ function configureAccess() {
     currentUser.role = getUserRole(currentUser);
     if (currentUser.login === 'Madi') currentUser.role = 'owner';
     localStorage.setItem('restart_user', JSON.stringify(currentUser));
-    document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
-    ['session-user', 'logout-btn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+    ['logout-btn'].forEach(id => document.getElementById(id).classList.remove('hidden'));
     if (isOwnerOrIT()) {
         document.querySelector('nav').classList.add('mobile-menu-ready');
         document.getElementById('nav-owner-btn').classList.remove('hidden');
@@ -3057,7 +3052,6 @@ function renderOwnerPanel() {
     };
     const weekTotal = sumCalendarRevenue(weekStart, todayDate, 7000);
     const monthTotal = sumCalendarRevenue(monthStart, todayDate, 7000);
-    document.getElementById('owner-name-chip').innerText = `${currentUser.name} · ${currentUser.role}`;
     const todayTotals = getNetRevenueTotals(getLocalDateKey());
     document.getElementById('owner-today').innerText = todayTotals.total.toLocaleString() + ' ₸';
     document.getElementById('owner-week').innerText = weekTotal.toLocaleString() + ' ₸';
@@ -3215,7 +3209,6 @@ async function saveAdminProfile() {
         currentUser = await response.json();
         ADMIN_NAME = currentUser.name;
         localStorage.setItem('restart_user', JSON.stringify(currentUser));
-        document.getElementById('session-user').innerText = `${currentUser.name} · ${currentUser.role}`;
         document.getElementById('admin-profile-password').value = '';
         await fetchEmployees();
         closeProfileModal();
