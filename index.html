@@ -2101,11 +2101,11 @@ function renderOwnerPanel() {
         }
         return total;
     };
-    const weekTotal = sumCalendarRevenue(weekStart, todayDate);
+    const weekTotal = sumCalendarRevenue(weekStart, todayDate, 7000);
     const monthTotal = sumCalendarRevenue(monthStart, todayDate, 7000);
     document.getElementById('owner-name-chip').innerText = `${currentUser.name} · ${currentUser.role}`;
-    const todayTotals = getRevenueTotals(getLocalDateKey());
-    document.getElementById('owner-today').innerText = (todayTotals.qr + todayTotals.cash).toLocaleString() + ' ₸';
+    const todayTotals = getNetRevenueTotals(getLocalDateKey());
+    document.getElementById('owner-today').innerText = todayTotals.total.toLocaleString() + ' ₸';
     document.getElementById('owner-week').innerText = weekTotal.toLocaleString() + ' ₸';
     document.getElementById('owner-month').innerText = monthTotal.toLocaleString() + ' ₸';
     const expenses = getExpenses();
