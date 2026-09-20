@@ -1846,8 +1846,7 @@ function getNetRevenueTotals(dateKey) {
     const totals = getRevenueTotals(dateKey);
     const gross = totals.qr + totals.cash;
     const salary = Math.min(gross, 7000 * getRevenueShiftCount(dateKey));
-    const netCash = Math.max(0, totals.cash - salary);
-    return { qr: totals.qr, cash: netCash, total: Math.max(0, gross - salary) };
+    return { qr: totals.qr, cash: totals.cash, total: Math.max(0, gross - salary) };
 }
 function getRevenueForDate(dateKey) {
     const history = getHistory();
@@ -1902,7 +1901,7 @@ function renderSelectedRevenue() {
     const qr = totals.qr;
     const cash = totals.cash;
     const editButton = (type) => currentUser?.role === 'owner' ? `<button type="button" class="text-slate-400 hover:text-blue-400 ml-2" title="Изменить" onclick="editRevenueValue('${type}')">✎</button>` : '';
-    result.innerHTML = `<div class="owner-stat"><div class="text-xs text-slate-400">QR ${editButton('qr')}</div><div class="text-xl font-black mt-2">${qr.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Наличные ${editButton('cash')}</div><div class="text-xl font-black mt-2">${cash.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Выручка за ${selectedDate.split('-').reverse().join('.')}</div><div class="text-xl font-black mt-2">${(qr + cash).toLocaleString()} ₸</div></div>`;
+    result.innerHTML = `<div class="owner-stat"><div class="text-xs text-slate-400">QR ${editButton('qr')}</div><div class="text-xl font-black mt-2">${qr.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Наличные ${editButton('cash')}</div><div class="text-xl font-black mt-2">${cash.toLocaleString()} ₸</div></div><div class="owner-stat"><div class="text-xs text-slate-400">Доход за ${selectedDate.split('-').reverse().join('.')}</div><div class="text-xl font-black mt-2">${totals.total.toLocaleString()} ₸</div></div>`;
     const editBox = document.getElementById('revenue-edit-box');
     editBox.classList.toggle('hidden', !currentUser || currentUser.role !== 'owner');
     if (currentUser?.role === 'owner') {
@@ -2072,7 +2071,7 @@ function renderRevenueCalendar() {
     for (let day = 1; day <= daysInMonth; day++) {
         const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const totals = getNetRevenueTotals(dateKey);
-        const total = totals.qr + totals.cash;
+        const total = totals.total;
         const classes = ['revenue-day'];
         if (dateKey === input.value) classes.push('selected');
         if (dateKey === today) classes.push('today');
