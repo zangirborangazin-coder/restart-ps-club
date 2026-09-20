@@ -725,8 +725,8 @@
 
         .presence-link {
             display: block !important;
-            width: min(240px, 28vw);
-            min-width: 195px;
+            width: 145px;
+            min-width: 145px;
             padding: 8px 10px !important;
             line-height: 1.2 !important;
             white-space: normal;
@@ -735,6 +735,14 @@
             border-color: rgba(148,191,224,0.16) !important;
             box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
         }
+        .nav-group-left { position: relative; }
+        .online-nav-popover {
+            position: absolute;
+            top: 54px;
+            left: 0;
+            z-index: 1200;
+        }
+        .online-nav-popover.hidden { display: none; }
         .presence-book-title {
             display: flex;
             align-items: center;
@@ -749,6 +757,17 @@
             margin-bottom: 5px;
             border-bottom: 1px solid rgba(148,191,224,0.12);
         }
+        .presence-book-close {
+            margin-left: auto;
+            padding: 0 3px;
+            min-height: 18px;
+            border: 0;
+            background: transparent;
+            color: #91a7b8;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .presence-book-close:hover { color: #ffffff; }
         .presence-book-count {
             color: #cce9f3;
             background: rgba(85,214,255,0.12);
@@ -900,7 +919,7 @@
             nav { padding: 0.35rem; }
             .nav-group-left::before { display: none; }
             .nav-link { min-height: 38px; padding-inline: 11px; }
-            .presence-link { width: 190px; min-width: 190px; }
+            .presence-link { width: 145px; min-width: 145px; }
             .page { padding-top: 1.5rem !important; }
         }
     </style>
@@ -950,12 +969,13 @@
         <div class="nav-link" onclick="showPage('status-page', this)">Монитор</div>
         <div id="nav-booking-btn" class="nav-link hidden" onclick="showPage('booking-list-page', this)" style="color: #32d74b">Брони</div>
         <div id="nav-cash-btn" class="nav-link hidden" onclick="showPage('cash-page', this)">Касса</div>
+        <button id="nav-online-btn" class="nav-link hidden" type="button" onclick="toggleOnlineUsers()">Онлайн</button>
+        <div id="online-users" class="online-nav-popover nav-link presence-link hidden" title="Пользователи онлайн"></div>
         <div id="nav-owner-btn" class="nav-link hidden" onclick="showPage('owner-page', this)">Владелец</div>
         <div id="admin-shift-countdown" class="nav-link nav-shift-status hidden">до 03:00</div>
     </div>
     <div class="nav-group nav-group-right">
         <div id="admin-reverse-report" class="nav-link hidden" style="color:#c4f1ff; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.22); border-radius: 999px; padding: 0.35rem 0.8rem; line-height: 1.2; white-space: nowrap;">Касса: 0 ₸ · Взял: 0 ₸ · Остался: 0 ₸</div>
-        <div id="online-users" class="nav-link presence-link hidden" title="Пользователи онлайн"></div>
         <div id="session-user" class="nav-link hidden" style="color:#7dd3fc"></div>
         <div id="nav-profile-btn" class="nav-link hidden" onclick="openProfileModal()">Профиль</div>
         <div id="logout-btn" class="nav-link hidden" onclick="logout()" style="color:#f87171">Выйти</div>
@@ -970,7 +990,7 @@
     </div>
 </div>
 
-<div id="main-page" class="page active max-w-7xl mx-auto p-10">
+<div id="main-page" class="page active max-w-7xl mx-auto p-10 relative">
     <div class="section-head">
         <div>
             <div class="text-xs uppercase tracking-[0.35em] text-slate-400">1 час - 1200₸</div>
@@ -1994,6 +2014,7 @@ window.addEventListener('load', () => {
 function logout() { localStorage.removeItem('restart_user'); location.reload(); }
 let presenceInterval = null;
 let adminControlReminderInterval = null;
+let onlineUsersVisible = false;
 const presenceSessionId = sessionStorage.getItem('presence_session_id') || crypto.randomUUID();
 sessionStorage.setItem('presence_session_id', presenceSessionId);
 
@@ -2010,9 +2031,16 @@ function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
     if (!element || !currentUser) return;
     const visibleUsers = users.length ? users : [{ name: currentUser.name, role: getUserRole() }];
-    element.innerHTML = `<div class="presence-book-title"><span>Сейчас онлайн</span><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
+    element.innerHTML = `<div class="presence-book-title"><span>Сейчас онлайн</span><button type="button" class="presence-book-close" onclick="toggleOnlineUsers(event)" aria-label="Скрыть онлайн">×</button><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
     element.title = visibleUsers.map(user => `${user.name} (${user.role})`).join('\n');
-    element.classList.remove('hidden');
+    element.classList.toggle('hidden', !onlineUsersVisible);
+}
+
+function toggleOnlineUsers(event) {
+    event?.stopPropagation();
+    onlineUsersVisible = !onlineUsersVisible;
+    document.getElementById('online-users')?.classList.toggle('hidden', !onlineUsersVisible);
+    document.getElementById('nav-online-btn')?.classList.toggle('active', onlineUsersVisible);
 }
 
 function escapeHtml(value) {
@@ -2067,6 +2095,7 @@ function configureAccess() {
         document.getElementById('nav-cash-btn').classList.remove('hidden');
         document.getElementById('nav-booking-btn').classList.remove('hidden');
     }
+    document.getElementById('nav-online-btn')?.classList.remove('hidden');
     if (getUserRole() === 'admin') document.getElementById('nav-cash-btn').classList.remove('hidden');
     const adminShiftFields = document.getElementById('admin-shift-fields');
     if (adminShiftFields) adminShiftFields.classList.toggle('hidden', getUserRole() !== 'admin');
