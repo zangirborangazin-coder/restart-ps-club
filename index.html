@@ -1873,29 +1873,44 @@ async function ensureAdminShiftOpened() {
     if (!currentUser || getUserRole() !== 'admin') return;
     const dateKey = getShiftDateKey();
     const history = getHistory();
-    let report = history.find(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
+    let report = history
+        .filter(item => {
+            const itemDateKey = item.dateKey || getRevenueDateKey(item);
+            const matchesAdmin = String(item.admin || '') === String(ADMIN_NAME || currentUser.name || '');
+            return matchesAdmin && itemDateKey === dateKey && (item.source === 'shift_opened' || item.source === 'shift_closed');
+        })
+        .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))[0];
+
+    if (report && report.shiftMeta?.status === 'closed' && report.source === 'shift_closed') {
+        report = null;
+    }
+
     let isNew = false;
     if (!report) {
         report = {
-        date: dateKey.split('-').reverse().join('.'),
-        dateKey,
-        timestamp: Date.now(),
-        admin: ADMIN_NAME,
-        qr: 0,
-        cash: 0,
-        previousCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
-        source: 'shift_opened',
-        finalCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
-        total: 0,
-        details: [],
-        shiftMeta: { cash: 0, taken: 0, remaining: 0, receipts: [] }
+            date: dateKey.split('-').reverse().join('.'),
+            dateKey,
+            timestamp: Date.now(),
+            admin: ADMIN_NAME,
+            qr: 0,
+            cash: 0,
+            previousCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
+            source: 'shift_opened',
+            finalCash: Number(currentCashBalance?.amount || localStorage.getItem('last_cash_balance') || 0),
+            total: 0,
+            details: [],
+            shiftMeta: { cash: 0, taken: 0, remaining: 0, receipts: [], status: 'open', openedAt: new Date().toISOString() }
         };
         history.push(report);
         isNew = true;
         localStorage.setItem('shift_history', JSON.stringify(history));
     }
+
     const meta = report.shiftMeta || {};
     if (!meta.openedAt) meta.openedAt = new Date(report.timestamp || Date.now()).toISOString();
+    if (!meta.status) meta.status = 'open';
+    report.shiftMeta = meta;
+
     const persistedReceipts = restorePersistedAdminReceipts(dateKey, ADMIN_NAME);
     if (Array.isArray(persistedReceipts) && persistedReceipts.length && (!Array.isArray(meta.receipts) || !meta.receipts.length)) {
         meta.receipts = persistedReceipts;
@@ -1930,19 +1945,25 @@ async function ensureAdminShiftOpened() {
 async function closeAdminShift() {
     if (!currentUser || getUserRole() !== 'admin') return;
     const report = getAdminShiftReport();
-    if (!report || report.shiftMeta?.status === 'closed') return;
+    if (!report) {
+        showSystemToast('Нет открытой смены для закрытия');
+        return;
+    }
+    if (report.shiftMeta?.status === 'closed') return;
     if (!confirm('Закрыть текущую смену? После закрытия время смены будет зафиксировано.')) return;
     const closedAt = new Date().toISOString();
     const shiftPayments = Object.values(payments);
     const qr = shiftPayments.reduce((sum, payment) => sum + Number(payment.qr || 0), 0);
     const cash = shiftPayments.reduce((sum, payment) => sum + Number(payment.cash || 0), 0);
-    const shiftMeta = { ...(report.shiftMeta || {}), status: 'closed', closedAt };
+    const shiftMeta = { ...(report.shiftMeta || {}), status: 'closed', closedAt, updatedAt: closedAt };
     const closedReport = { ...report, qr, cash, total: qr + cash, source: 'shift_closed', finalCash: Number(shiftMeta.remaining || report.finalCash || 0), details: shiftPayments, shiftMeta };
     if (report.id) {
         await fetch(`/api/shift-reports/${report.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(closedReport) }).catch(() => null);
     }
     const history = getHistory().map(item => item.id === report.id || item.timestamp === report.timestamp ? closedReport : item);
     localStorage.setItem('shift_history', JSON.stringify(history));
+    if (isOwnerOrIT()) renderOwnerPanel();
+    await syncAllData();
     await fetch(`/api/payments/date/${report.dateKey}`, { method: 'DELETE' }).catch(() => null);
     localStorage.removeItem('saved_payments');
     payments = {};
@@ -1952,17 +1973,28 @@ async function closeAdminShift() {
     ['admin-shift-cash', 'admin-shift-taken', 'admin-shift-remaining'].forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
     document.getElementById('admin-receipts-file').value = '';
     syncPaymentsToFinance();
-    renderOwnerPanel();
     renderAdminShiftClock({ status: 'closed', closedAt });
     showSystemToast('Смена закрыта. Выход из аккаунта...');
     setTimeout(() => {
+        currentUser = null;
+        ADMIN_NAME = '';
         localStorage.removeItem('restart_user');
         location.reload();
     }, 800);
 }
 function getAdminShiftReport() {
     const dateKey = getShiftDateKey();
-    return getHistory().find(item => item.source === 'shift_opened' && item.dateKey === dateKey && item.admin === ADMIN_NAME);
+    const history = getHistory();
+    const report = history
+        .filter(item => {
+            const itemDateKey = item.dateKey || getRevenueDateKey(item);
+            return itemDateKey === dateKey && item.admin === ADMIN_NAME && (item.source === 'shift_opened' || item.source === 'shift_closed');
+        })
+        .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))[0];
+
+    if (!report) return null;
+    if (report.source === 'shift_closed' && report.shiftMeta?.status === 'closed') return report;
+    return report;
 }
 function parseInputSum(value) {
     return String(value || '').trim().split(/\s+/).reduce((sum, part) => sum + (Number(part) || 0), 0);
