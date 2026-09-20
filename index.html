@@ -1719,6 +1719,16 @@ async function login(event) {
         return;
     }
 
+    const sessionCheck = await fetch(`/api/presence/check?login=${encodeURIComponent(user.login)}&sessionId=${encodeURIComponent(presenceSessionId)}`).catch(() => null);
+    if (sessionCheck?.ok) {
+        const sessionState = await sessionCheck.json().catch(() => ({ available: true }));
+        if (!sessionState.available) {
+            error.innerText = 'Этот аккаунт уже открыт на другом устройстве или во вкладке.';
+            error.classList.remove('hidden');
+            return;
+        }
+    }
+
     currentUser = user;
     currentUser.role = getUserRole(currentUser);
     if (currentUser.login === 'Madi') currentUser.role = 'owner';
@@ -1763,7 +1773,13 @@ async function syncPresence() {
     if (!currentUser) return;
     const payload = { sessionId: presenceSessionId, name: currentUser.name, login: currentUser.login, role: getUserRole() };
     try {
-        await fetch('/api/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const saveResponse = await fetch('/api/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (saveResponse.status === 409) {
+            localStorage.removeItem('restart_user');
+            showSystemToast('Аккаунт открыт на другом устройстве или во вкладке');
+            setTimeout(() => location.reload(), 800);
+            return;
+        }
         const response = await fetch('/api/presence');
         if (response.ok) renderOnlineUsers(await response.json());
     } catch (error) {
