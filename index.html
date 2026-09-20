@@ -1655,6 +1655,22 @@ function isOwnerOrIT() {
     return ['owner', 'it'].includes(getUserRole());
 }
 
+function notifyOwnerAboutOpenedShifts(reports) {
+    if (!isOwnerOrIT() || !Array.isArray(reports)) return;
+    const notified = JSON.parse(localStorage.getItem('owner_notified_shift_openings') || '[]');
+    const fresh = reports.find(report => {
+        if (report.source !== 'shift_opened') return false;
+        const key = `${report.id || report.timestamp}:${report.admin || ''}:${report.dateKey || report.date || ''}`;
+        return !notified.includes(key);
+    });
+    reports.filter(report => report.source === 'shift_opened').forEach(report => {
+        const key = `${report.id || report.timestamp}:${report.admin || ''}:${report.dateKey || report.date || ''}`;
+        if (!notified.includes(key)) notified.push(key);
+    });
+    localStorage.setItem('owner_notified_shift_openings', JSON.stringify(notified.slice(-100)));
+    if (fresh) showSystemToast(`Смена открыта: ${fresh.admin || 'Администратор'} · ${fresh.date || fresh.dateKey || ''}`);
+}
+
 // 2. Фоновая загрузка дополнительных сотрудников из базы PostgreSQL
 async function fetchEmployees() {
   try {
@@ -1711,6 +1727,7 @@ async function login(event) {
     configureAccess();
     if (getUserRole() === 'admin') {
         await ensureAdminShiftOpened();
+        showSystemToast(`Смена открыта до 03:00 · ${getShiftDateKey().split('-').reverse().join('.')}`);
         renderOwnerPanel();
         await syncAllData();
     }
@@ -1870,7 +1887,7 @@ function renderAdminShiftClock(meta = {}) {
     adminShiftClockInterval = setInterval(update, 1000);
 }
 async function ensureAdminShiftOpened() {
-    if (!currentUser || getUserRole() !== 'admin') return;
+    if (!currentUser || getUserRole() !== 'admin') return null;
     const dateKey = getShiftDateKey();
     const history = getHistory();
     let report = history
@@ -1941,12 +1958,14 @@ async function ensureAdminShiftOpened() {
     } catch (error) {
         showSystemToast('Смена открыта локально до восстановления связи');
     }
+    return report;
 }
 async function closeAdminShift() {
     if (!currentUser || getUserRole() !== 'admin') return;
+    await ensureAdminShiftOpened();
     const report = getAdminShiftReport();
     if (!report) {
-        showSystemToast('Нет открытой смены для закрытия');
+        showSystemToast('Не удалось найти текущую смену. Повторите закрытие.');
         return;
     }
     if (report.shiftMeta?.status === 'closed') return;
@@ -1988,7 +2007,9 @@ function getAdminShiftReport() {
     const report = history
         .filter(item => {
             const itemDateKey = item.dateKey || getRevenueDateKey(item);
-            return itemDateKey === dateKey && item.admin === ADMIN_NAME && (item.source === 'shift_opened' || item.source === 'shift_closed');
+            const itemAdmin = String(item.admin || '').trim();
+            const activeAdmin = String(ADMIN_NAME || currentUser?.name || '').trim();
+            return itemDateKey === dateKey && itemAdmin === activeAdmin && (item.source === 'shift_opened' || item.source === 'shift_closed');
         })
         .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))[0];
 
@@ -2920,6 +2941,7 @@ async function syncAllData() {
                 }
                 return report;
             });
+            notifyOwnerAboutOpenedShifts(mergedReports);
             localStorage.setItem('shift_history', JSON.stringify(mergedReports));
             if (isOwnerOrIT()) renderOwnerPanel();
         }),
@@ -2935,6 +2957,11 @@ setInterval(syncAllData, 2000);
 window.addEventListener('focus', syncAllData);
 window.addEventListener('storage', event => {
     if (event.key === 'shift_history' && isOwnerOrIT()) {
+        try {
+            notifyOwnerAboutOpenedShifts(JSON.parse(event.newValue || '[]'));
+        } catch (error) {
+            console.warn('Не удалось прочитать историю смены:', error);
+        }
         renderOwnerPanel();
     }
 });
