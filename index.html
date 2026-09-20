@@ -723,6 +723,60 @@
         }
         .nav-shift-status { min-height: 36px; }
 
+        .presence-link {
+            display: block !important;
+            width: min(270px, 30vw);
+            min-width: 210px;
+            padding: 9px 12px !important;
+            line-height: 1.25 !important;
+            white-space: normal;
+            text-align: left;
+            background: rgba(9, 20, 32, 0.92) !important;
+            border-color: rgba(114,230,176,0.22) !important;
+        }
+        .presence-book-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: #b9f7d7;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding-bottom: 7px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(114,230,176,0.16);
+        }
+        .presence-book-count {
+            color: #07120f;
+            background: #9af3c5;
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 9px;
+        }
+        .presence-book-list { display: grid; gap: 4px; }
+        .presence-book-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 5px;
+            border-radius: 7px;
+            color: #dceee7;
+            font-size: 11px;
+            background: rgba(114,230,176,0.045);
+        }
+        .presence-book-row::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            background: #72e6b0;
+            box-shadow: 0 0 8px rgba(114,230,176,0.7);
+        }
+        .presence-book-role { color: #8fa8bf; margin-left: auto; font-size: 9px; }
+
         .page { padding-top: clamp(2rem, 4vw, 4.8rem) !important; }
         .section-head { position: relative; }
         .section-head::after {
@@ -813,10 +867,37 @@
         }
         #admin-receipts-progress-bar { background: linear-gradient(90deg, #9af3c5, #55d6ff, #168fca); }
 
+        .admin-monitoring-note {
+            position: relative;
+            overflow: hidden;
+            border-color: rgba(251,191,36,0.2);
+            background: linear-gradient(135deg, rgba(70,53,22,0.32), rgba(13,21,35,0.9));
+        }
+        .admin-monitoring-note::after {
+            content: '';
+            position: absolute;
+            right: 24px;
+            top: 50%;
+            width: 74px;
+            height: 74px;
+            transform: translateY(-50%);
+            border: 1px solid rgba(251,191,36,0.28);
+            border-radius: 50%;
+            box-shadow: 0 0 0 10px rgba(251,191,36,0.035), 0 0 30px rgba(251,191,36,0.1);
+        }
+        .admin-monitoring-kicker {
+            color: #f6d98a;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
         @media (max-width: 767px) {
             nav { padding: 0.35rem; }
             .nav-group-left::before { display: none; }
             .nav-link { min-height: 38px; padding-inline: 11px; }
+            .presence-link { width: 190px; min-width: 190px; }
             .page { padding-top: 1.5rem !important; }
         }
     </style>
@@ -1086,6 +1167,11 @@
     <div class="stealth-card p-7">
         <h2 class="text-xl font-bold mb-2">Сдача смены</h2>
         <p class="text-sm text-slate-400 mb-6">После сдачи владелец увидит каждую оплату по VIP, QR, наличные и итог за сегодня.</p>
+    </div>
+    <div class="stealth-card admin-monitoring-note mt-5 p-6">
+        <div class="admin-monitoring-kicker">Контроль клуба</div>
+        <h2 class="text-lg font-bold mt-2">Работа проходит под контролем владельцев</h2>
+        <p class="text-sm text-slate-400 mt-2">Операции смены и состояние клуба контролируются владельцами онлайн. Территория клуба дополнительно оснащена системой видеонаблюдения.</p>
     </div>
 </div>
 
@@ -1910,11 +1996,9 @@ sessionStorage.setItem('presence_session_id', presenceSessionId);
 function renderOnlineUsers(users) {
     const element = document.getElementById('online-users');
     if (!element || !currentUser) return;
-    const names = users.map(user => `${user.name} (${user.role})`);
-    element.innerHTML = names.length
-        ? `<div>Онлайн:</div>${names.map(name => `<div>• ${escapeHtml(name)}</div>`).join('')}`
-        : '<div>Онлайн:</div><div>• только вы</div>';
-    element.title = names.join('\n') || 'Пользователи онлайн';
+    const visibleUsers = users.length ? users : [{ name: currentUser.name, role: getUserRole() }];
+    element.innerHTML = `<div class="presence-book-title"><span>Сейчас онлайн</span><span class="presence-book-count">${visibleUsers.length}</span></div><div class="presence-book-list">${visibleUsers.map(user => `<div class="presence-book-row"><span>${escapeHtml(user.name)}</span><span class="presence-book-role">${escapeHtml(user.role)}</span></div>`).join('')}</div>`;
+    element.title = visibleUsers.map(user => `${user.name} (${user.role})`).join('\n');
     element.classList.remove('hidden');
 }
 
