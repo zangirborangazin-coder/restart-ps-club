@@ -830,6 +830,16 @@
         </div>
     </div>
     <div class="stealth-card p-6 mb-8">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div><h2 class="font-bold text-lg">Бэкап выручки</h2><p class="text-xs text-slate-400 mt-2">Скачать все оплаты и отчёты или восстановить их из JSON-файла.</p></div>
+            <div class="flex flex-wrap gap-2">
+                <button class="btn-secondary text-xs" type="button" onclick="downloadRevenueBackup()">Скачать бэкап</button>
+                <button class="btn-stealth text-xs" type="button" onclick="document.getElementById('revenue-backup-file').click()">Загрузить бэкап</button>
+                <input id="revenue-backup-file" type="file" accept="application/json,.json" class="hidden" onchange="restoreRevenueBackup(event)">
+            </div>
+        </div>
+    </div>
+    <div class="stealth-card p-6 mb-8">
         <div class="flex items-center justify-between gap-3 mb-5">
             <h2 class="font-bold text-lg">Выдача администраторам</h2>
             <span class="text-xs text-slate-400">7 000 ₸ за смену</span>
@@ -1026,9 +1036,14 @@ function trackAction(message) {
         return `${year}-${month}-${day}`;
     }
 
-    function markShiftOpened() {
+    function getShiftDateKey(date = new Date()) {
+        const shiftDate = new Date(date);
+        if (shiftDate.getHours() < 3) shiftDate.setDate(shiftDate.getDate() - 1);
+        return getLocalDateKey(shiftDate);
+    }
+
+    function markShiftOpened(dateKey = getShiftDateKey()) {
         if (!currentUser || currentUser.role !== 'admin') return;
-        const dateKey = getLocalDateKey();
         const openedDates = JSON.parse(localStorage.getItem('opened_shift_dates') || '[]');
         if (!openedDates.includes(dateKey)) {
             openedDates.push(dateKey);
@@ -1920,6 +1935,64 @@ async function saveRevenueAdjustmentToServer(dateKey, qr, cash) {
         showSystemToast('Корректировка сохранена локально до восстановления связи');
     }
 }
+async function getRevenueBackup() {
+    const localBackup = {
+        payments: Object.values(payments),
+        shiftReports: getHistory(),
+        revenueAdjustments: JSON.parse(localStorage.getItem('revenue_adjustments') || '{}'),
+        cashBalance: currentCashBalance,
+        openedShiftDates: JSON.parse(localStorage.getItem('opened_shift_dates') || '[]'),
+        expenses: getExpenses()
+    };
+    try {
+        const response = await fetch('/api/revenue-backup');
+        if (response.ok) return { ...localBackup, ...(await response.json()) };
+    } catch (error) { console.warn('Серверный бэкап недоступен:', error); }
+    return localBackup;
+}
+async function downloadRevenueBackup() {
+    if (!isOwnerOrIT()) return showSystemToast('Скачать бэкап может только владелец или IT');
+    const backup = await getRevenueBackup();
+    backup.version = 1;
+    backup.createdAt = new Date().toISOString();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `restart-revenue-backup-${getLocalDateKey()}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showSystemToast('Бэкап выручки скачан');
+}
+async function restoreRevenueBackup(event) {
+    if (!isOwnerOrIT()) return showSystemToast('Восстановить бэкап может только владелец или IT');
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+        const backup = JSON.parse(await file.text());
+        if (!Array.isArray(backup.payments) || !Array.isArray(backup.shiftReports) || !backup.revenueAdjustments || typeof backup.revenueAdjustments !== 'object') throw new Error('format');
+        if (!confirm(`Заменить текущую выручку данными из файла? Оплат: ${backup.payments.length}, отчётов: ${backup.shiftReports.length}.`)) return;
+        payments = Object.fromEntries(backup.payments.map(payment => [payment.id, payment]));
+        localStorage.setItem('saved_payments', JSON.stringify(payments));
+        localStorage.setItem('shift_history', JSON.stringify(backup.shiftReports));
+        localStorage.setItem('revenue_adjustments', JSON.stringify(backup.revenueAdjustments));
+        if (Array.isArray(backup.openedShiftDates)) localStorage.setItem('opened_shift_dates', JSON.stringify(backup.openedShiftDates));
+        if (Array.isArray(backup.expenses)) localStorage.setItem('shift_expenses', JSON.stringify(backup.expenses));
+        if (backup.cashBalance) {
+            currentCashBalance = backup.cashBalance;
+            localStorage.setItem('cash_balance', JSON.stringify(currentCashBalance));
+        }
+        const response = await fetch('/api/revenue-backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(backup) });
+        if (!response.ok) throw new Error('server');
+        syncPaymentsToFinance();
+        renderOwnerPanel();
+        showSystemToast('Выручка восстановлена из бэкапа');
+    } catch (error) {
+        showSystemToast(error.message === 'format' ? 'Неверный формат бэкапа' : 'Бэкап сохранён локально, сервер недоступен');
+        syncPaymentsToFinance();
+        renderOwnerPanel();
+    }
+}
 let revenueCalendarMonth = null;
 function formatRevenueMonth(monthKey) {
     const [year, month] = monthKey.split('-').map(Number);
@@ -2200,7 +2273,8 @@ async function confirmShiftReport() {
         finalCash = actualCash - 7000;
         finalCash -= expenseAmount;
     }
-    const report = { date: new Date().toLocaleDateString('ru-RU'), dateKey: getLocalDateKey(), timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, expenseTitle: expenseAmount > 0 ? expenseTitle : '', expenseAmount, details: Object.values(payments) };
+    const shiftDateKey = Object.values(payments)[0]?.dateKey || getShiftDateKey();
+    const report = { date: shiftDateKey.split('-').reverse().join('.'), dateKey: shiftDateKey, timestamp: Date.now(), admin: ADMIN_NAME, qr, cash, previousCash, source, finalCash, total: qr + cash, expenseTitle: expenseAmount > 0 ? expenseTitle : '', expenseAmount, details: Object.values(payments) };
     const reportResponse = await fetch('/api/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report) }).catch(() => null);
     const reportSent = Boolean(reportResponse?.ok);
     localStorage.setItem('last_shift_settlement', JSON.stringify({ cashOnHand: actualCash, source, balance: finalCash, date: report.date, admin: ADMIN_NAME }));
@@ -2375,7 +2449,7 @@ async function syncAllData() {
                 }
             });
             activeRuns.forEach(run => {
-                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open };
+                const runData = { type: run.type, id: run.id, startTime: run.start_time, endTime: run.end_time, isOpen: run.is_open, shiftDateKey: run.shift_date_key || run.shiftDateKey || getShiftDateKey() };
                 localStorage.setItem(`run_${run.key}`, JSON.stringify(runData));
                 renderActiveState(run.key, run.type, run.id, run.start_time, run.end_time, run.is_open);
             });
@@ -2423,7 +2497,7 @@ async function startControl(type, id) {
     } else if (type === 'promo') {
         endTime = startTime + 180;
     }
-    const runData = { key, type, id, startTime, endTime, isOpen };
+    const runData = { key, type, id, startTime, endTime, isOpen, shiftDateKey: getShiftDateKey() };
     try {
         const response = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runData) });
         if (!response.ok) throw new Error('Не удалось сохранить сессию');
@@ -2472,7 +2546,7 @@ async function savePayment(key) {
     if (expected > 0 && cash + qr !== expected) return alert(`ОШИБКА! Нужно: ${expected} ₸`);
     const startStr = `${String(Math.floor(runData.startTime / 60)).padStart(2, '0')}:${String(runData.startTime % 60).padStart(2, '0')}`;
     const endStr = runData.endTime === null || runData.endTime === undefined ? 'Открыт' : `${String(Math.floor(runData.endTime / 60)).padStart(2, '0')}:${String(runData.endTime % 60).padStart(2, '0')}`;
-    const payment = { id: Date.now(), cash, qr, timestamp: Date.now(), dateKey: getLocalDateKey(), time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), startStr, endStr, total: expected, duration, zone: key.toUpperCase().replace('STD', 'VIP') };
+    const payment = { id: Date.now(), cash, qr, timestamp: Date.now(), dateKey: runData.shiftDateKey || getShiftDateKey(), time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), startStr, endStr, total: expected, duration, zone: key.toUpperCase().replace('STD', 'VIP') };
     try {
         const response = await fetch('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) });
         if (!response.ok) throw new Error('payment');
