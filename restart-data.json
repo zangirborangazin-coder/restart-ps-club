@@ -26,18 +26,18 @@
     },
     {
       "id": 4,
-      "name": "IT",
+      "name": "Zhangir",
       "login": "brngzn03",
       "password": "Cocolimbo03",
-      "role": "it",
+      "role": "owner",
       "fixed": true
     },
     {
       "id": 5,
-      "name": "Zhangir",
+      "name": "IT",
       "login": "Zhangir",
       "password": "Cocolimbo03",
-      "role": "admin",
+      "role": "it",
       "fixed": true
     },
     {
