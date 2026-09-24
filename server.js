@@ -16,8 +16,8 @@ const defaultEmployees = [
 	['Мади', 'Madi', 'Asd1230123', 'owner', true],
 	['Еламан', 'Elaman', 'Asd1230123', 'owner', true],
 	['Нурбол', 'Nurbol', 'Asd1230123', 'owner', true],
-	['IT', 'brngzn03', 'Cocolimbo03', 'it', true],
-	['Zhangir', 'Zhangir', 'Cocolimbo03', 'admin', true],
+	['Zhangir', 'brngzn03', 'Cocolimbo03', 'owner', true],
+	['IT', 'Zhangir', 'Cocolimbo03', 'it', true],
 	['Администратор', 'admin', 'Aa1234', 'admin', true]
 ];
 let databaseAvailable = Boolean(pool);
